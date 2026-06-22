@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBKR Portfolio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand: #2563EB; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      background: #F9FAFB;
+      color: #111827;
+    }
+
+    .data-table tbody tr:hover { background: #F3F4F6; }
+
+    @keyframes pulse-bg {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+    .skeleton {
+      background: #E5E7EB;
+      border-radius: 4px;
+      animation: pulse-bg 1.5s ease-in-out infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 0.8s linear infinite; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid #E5E7EB;
+    }
+
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* OTM bar */
+    .otm-bar {
+      display: inline-block;
+      width: 48px; height: 4px;
+      border-radius: 2px;
+      background: #E5E7EB;
+      vertical-align: middle;
+      margin-left: 4px;
+      overflow: hidden;
+    }
+    .otm-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+    /* Sortable headers */
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    th.sortable:hover { background: #EAECF0; color: #374151; }
+    th.sortable .sort-icon {
+      display: inline-block;
+      margin-left: 3px;
+      font-size: 9px;
+      opacity: 0.3;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    th.sortable.sort-active { color: #2563EB; }
+    th.sortable.sort-active .sort-icon { opacity: 1; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ─── HEADER ──────────────────────────────────────────────── -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-screen-xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center">
+          <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13l4-4 4 4 4-6 4 3" />
+          </svg>
+        </div>
+        <span class="font-semibold text-gray-900 text-sm tracking-tight">IBKR Portfolio</span>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <div id="gateway-dot" class="flex items-center gap-1.5 text-xs text-gray-500">
+          <span id="dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
+          <span id="dot-label">—</span>
+        </div>
+        <span id="last-updated" class="text-xs text-gray-400 hidden sm:block"></span>
+        <button id="refresh-btn" onclick="loadPortfolio()"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200
+                 rounded-md hover:bg-blue-50 active:bg-blue-100 transition-colors">
+          <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 4v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── MAIN ────────────────────────────────────────────────── -->
+  <main class="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
+
+    <!-- Error banner -->
+    <div id="error-banner" class="hidden bg-red-50 border border-red-200 rounded-lg px-4 py-3
+         flex items-start gap-3 text-sm text-red-800">
+      <svg class="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <p id="error-msg" class="font-medium"></p>
+        <p class="text-red-600 mt-0.5">
+          Make sure the IBKR Client Portal Gateway is running and you are logged in at
+          <a href="https://localhost:5001" target="_blank" class="underline hover:text-red-900">https://localhost:5001</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- ── ACCOUNT SUMMARY ──────────────────────────────────── -->
+    <section>
+      <div id="summary-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+    </section>
+
+    <!-- ── STOCK POSITIONS ──────────────────────────────────── -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+          Stock Positions
+          <span id="stocks-count" class="ml-1.5 text-xs font-normal text-gray-400"></span>
+        </h2>
+      </div>
+      <!-- Stock summary stats -->
+      <div id="stocks-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
+
+      <div class="table-wrap">
+        <table id="stocks-table" class="data-table w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-200">
+              <th class="px-4 py-2.5 text-left   sortable sort-active" data-col="ticker"        onclick="handleSort('stocks','ticker')">        Symbol        <span class="sort-icon">↑</span></th>
+              <th class="px-4 py-2.5 text-left   sortable hidden md:table-cell" data-col="name" onclick="handleSort('stocks','name')">          Name          <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="qty"                        onclick="handleSort('stocks','qty')">           Qty           <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="mktPrice"                   onclick="handleSort('stocks','mktPrice')">      Price         <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="mktValue"    onclick="handleSort('stocks','mktValue')">   Market Value  <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="avgCost"     onclick="handleSort('stocks','avgCost')">    Avg Cost      <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="unrealizedPnl"               onclick="handleSort('stocks','unrealizedPnl')"> P&amp;L       <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="pnlPct"      onclick="handleSort('stocks','pnlPct')">     P&amp;L %    <span class="sort-icon">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="stocks-body" class="divide-y divide-gray-100 bg-white"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── OPTIONS POSITIONS ────────────────────────────────── -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+          Options Positions
+          <span id="options-count" class="ml-1.5 text-xs font-normal text-gray-400"></span>
+        </h2>
+        <div class="hidden sm:flex items-center gap-3 text-xs text-gray-500">
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-green-500"></span> Safe</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span> Watch</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-red-500"></span> At Risk</span>
+        </div>
+      </div>
+      <!-- Options summary stats -->
+      <div id="options-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4"></div>
+
+      <div class="table-wrap">
+        <table id="options-table" class="data-table w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-200">
+              <th class="px-4 py-2.5 text-left   sortable sort-active" data-col="ticker"           onclick="handleSort('options','ticker')">           Symbol      <span class="sort-icon">↑</span></th>
+              <th class="px-4 py-2.5 text-center sortable" data-col="type"                          onclick="handleSort('options','type')">             Type        <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="strike"                        onclick="handleSort('options','strike')">           Strike      <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-left   sortable hidden sm:table-cell" data-col="dte"      onclick="handleSort('options','dte')">              Expiry      <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="dte"                           onclick="handleSort('options','dte')">              DTE         <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden md:table-cell" data-col="qty"      onclick="handleSort('options','qty')">              Qty         <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="premium"  onclick="handleSort('options','premium')">          Premium     <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="underlyingPrice" onclick="handleSort('options','underlyingPrice')"> Underlying  <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="otmPct"                        onclick="handleSort('options','otmPct')">           % OTM       <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="unrealizedPnl" onclick="handleSort('options','unrealizedPnl')"> P&amp;L    <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden md:table-cell" data-col="pnlPctCaptured" onclick="handleSort('options','pnlPctCaptured')"> Captured <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-center sortable" data-col="status"                        onclick="handleSort('options','status')">           Status      <span class="sort-icon">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="options-body" class="divide-y divide-gray-100 bg-white"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── JAVASCRIPT ─────────────────────────────────────────── -->
+  <script>
+    // ── Formatting helpers ──────────────────────────────────────
+
+    const fmt = {
+      usd: v => v == null ? '—' : '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      pnl: v => {
+        if (v == null) return '—';
+        return (v >= 0 ? '+' : '-') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+      pct: v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%',
+      num: v => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+      int: v => v == null ? '—' : Math.round(v).toLocaleString('en-US'),
+    };
+
+    function pnlColor(v) {
+      if (v == null) return 'text-gray-400';
+      return v >= 0 ? 'text-green-600' : 'text-red-600';
+    }
+
+    function statusBadge(status) {
+      const map = {
+        safe:    ['bg-green-50 text-green-700 ring-green-600/20',  'Safe'],
+        watch:   ['bg-amber-50 text-amber-700 ring-amber-600/20',  'Watch'],
+        risk:    ['bg-red-50   text-red-700   ring-red-600/20',    'At Risk'],
+        expired: ['bg-gray-100 text-gray-500  ring-gray-500/20',   'Expired'],
+        unknown: ['bg-gray-100 text-gray-500  ring-gray-500/20',   '—'],
+      };
+      const [cls, label] = map[status] ?? map.unknown;
+      return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}">${label}</span>`;
+    }
+
+    function otmDisplay(pct) {
+      if (pct == null) return '<span class="text-gray-400">—</span>';
+      let textCls, fillColor, barWidth;
+      if (pct < 0)       { textCls = 'text-red-600 font-semibold'; fillColor = '#DC2626'; barWidth = '0%'; }
+      else if (pct < 8)  { textCls = 'text-red-500';  fillColor = '#EF4444'; barWidth = Math.min(pct / 8 * 40, 40) + '%'; }
+      else if (pct < 15) { textCls = 'text-amber-600'; fillColor = '#D97706'; barWidth = Math.min(pct / 15 * 65, 65) + '%'; }
+      else               { textCls = 'text-green-600'; fillColor = '#16A34A'; barWidth = Math.min(pct / 30 * 100, 100) + '%'; }
+      return `<span class="${textCls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>
+              <span class="otm-bar"><span class="otm-bar-fill" style="width:${barWidth};background:${fillColor}"></span></span>`;
+    }
+
+    function dteDisplay(dte) {
+      if (dte == null)  return '<span class="text-gray-400">—</span>';
+      if (dte <= 0)     return `<span class="text-gray-400 line-through">${dte}d</span>`;
+      if (dte <= 5)     return `<span class="text-red-600 font-semibold">${dte}d</span>`;
+      if (dte <= 14)    return `<span class="text-amber-600">${dte}d</span>`;
+      return `<span class="text-gray-700">${dte}d</span>`;
+    }
+
+    // ── Sort state ──────────────────────────────────────────────
+
+    // Raw data stores (original API order preserved for neutral sort)
+    let rawStocks  = [];
+    let rawOptions = [];
+
+    // Active sort per table — default: first column (ticker) ascending
+    const sortState = {
+      stocks:  { key: 'ticker', dir: 'asc' },
+      options: { key: 'ticker', dir: 'asc' },
+    };
+
+    // How to compare null / special values per data type
+    const STATUS_ORDER = { risk: 0, watch: 1, unknown: 2, safe: 3, expired: 4 };
+
+    const COL_TYPE = {
+      stocks: {
+        ticker: 'str', name: 'str', qty: 'num', mktPrice: 'num',
+        mktValue: 'num', avgCost: 'num', unrealizedPnl: 'num', pnlPct: 'num',
+      },
+      options: {
+        ticker: 'str', type: 'str', strike: 'num', dte: 'num',
+        qty: 'num', premium: 'num', underlyingPrice: 'num',
+        otmPct: 'num', unrealizedPnl: 'num', pnlPctCaptured: 'num', status: 'status',
+      },
+    };
+
+    function getVal(row, key, type) {
+      const v = row[key];
+      if (v == null) return type === 'str' ? '￿' : -Infinity; // nulls sort last
+      if (type === 'status') return STATUS_ORDER[v] ?? 99;
+      return v;
+    }
+
+    function sortRows(arr, key, dir, type) {
+      return [...arr].sort((a, b) => {
+        const av = getVal(a, key, type);
+        const bv = getVal(b, key, type);
+        const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+        return dir === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    /** Click handler: cycle active-column through asc → desc → neutral (raw order) */
+    function handleSort(table, key) {
+      const s = sortState[table];
+      if (s.key === key) {
+        // Same column: advance the cycle
+        if (s.dir === 'asc')       s.dir = 'desc';
+        else if (s.dir === 'desc') { s.key = null; s.dir = null; }
+        else                       { s.key = key;  s.dir = 'asc'; }
+      } else {
+        s.key = key;
+        s.dir = 'asc';
+      }
+      applySort(table);
+    }
+
+    function applySort(table) {
+      const s   = sortState[table];
+      const raw = table === 'stocks' ? rawStocks : rawOptions;
+      const type = s.key ? (COL_TYPE[table][s.key] || 'str') : 'str';
+      const rows = s.key ? sortRows(raw, s.key, s.dir, type) : [...raw];
+
+      if (table === 'stocks') renderStocks(rows);
+      else                    renderOptions(rows);
+
+      syncSortHeaders(table);
+    }
+
+    /** Update the ↑ ↓ ↕ indicator and active highlight on headers */
+    function syncSortHeaders(table) {
+      const s = sortState[table];
+      const tableEl = document.getElementById(table === 'stocks' ? 'stocks-table' : 'options-table');
+      tableEl.querySelectorAll('th[data-col]').forEach(th => {
+        const col    = th.dataset.col;
+        const active = s.key === col && s.dir;
+        th.classList.toggle('sort-active', !!active);
+        const icon = th.querySelector('.sort-icon');
+        if (icon) icon.textContent = active ? (s.dir === 'asc' ? '↑' : '↓') : '↕';
+      });
+    }
+
+    // ── Render functions ────────────────────────────────────────
+
+    function renderSummary(acct) {
+      const metrics = [
+        { label: 'Net Liquidation',  value: fmt.usd(acct.netLiq),        pnlVal: null },
+        { label: 'Cash',             value: fmt.usd(acct.cash),           pnlVal: null },
+        { label: 'Unrealized P&L',   value: fmt.pnl(acct.unrealizedPnl), pnlVal: acct.unrealizedPnl },
+        { label: 'Buying Power',     value: fmt.usd(acct.buyingPower),    pnlVal: null },
+        { label: 'Excess Liquidity', value: fmt.usd(acct.excessLiquidity),pnlVal: null },
+      ];
+      document.getElementById('summary-grid').innerHTML = metrics.map(m => {
+        const color = m.pnlVal != null ? pnlColor(m.pnlVal) : 'text-gray-900';
+        return `
+          <div class="bg-white rounded-lg border border-gray-200 px-4 py-3.5 shadow-sm">
+            <p class="text-xs text-gray-500 mb-1">${m.label}</p>
+            <p class="text-lg font-semibold ${color} leading-tight">${m.value}</p>
+          </div>`;
+      }).join('');
+    }
+
+    function renderStocks(stocks) {
+      document.getElementById('stocks-count').textContent = `(${stocks.length})`;
+      const tbody = document.getElementById('stocks-body');
+      if (!stocks.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-gray-400">No stock positions</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = stocks.map(s => `
+        <tr class="transition-colors">
+          <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+            ${s.ticker}
+            <div class="text-xs text-gray-400 font-normal hidden md:block">${s.name}</div>
+          </td>
+          <td class="px-4 py-3 hidden md:table-cell text-gray-600 text-xs max-w-[160px] truncate">${s.name}</td>
+          <td class="px-4 py-3 num text-gray-700">${fmt.int(s.qty)}</td>
+          <td class="px-4 py-3 num text-gray-700">${fmt.usd(s.mktPrice)}</td>
+          <td class="px-4 py-3 num text-gray-700 hidden sm:table-cell">${fmt.usd(s.mktValue)}</td>
+          <td class="px-4 py-3 num text-gray-500 hidden lg:table-cell">${fmt.usd(s.avgCost)}</td>
+          <td class="px-4 py-3 num ${pnlColor(s.unrealizedPnl)}">${fmt.pnl(s.unrealizedPnl)}</td>
+          <td class="px-4 py-3 num ${pnlColor(s.pnlPct)} hidden sm:table-cell">${fmt.pct(s.pnlPct)}</td>
+        </tr>`).join('');
+    }
+
+    function renderOptions(options) {
+      document.getElementById('options-count').textContent = `(${options.length})`;
+      const tbody = document.getElementById('options-body');
+      if (!options.length) {
+        tbody.innerHTML = `<tr><td colspan="12" class="px-4 py-6 text-center text-sm text-gray-400">No options positions</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = options.map(o => {
+        const typeBadge = o.type === 'P'
+          ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold bg-blue-50 text-blue-700">PUT</span>`
+          : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold bg-purple-50 text-purple-700">CALL</span>`;
+        const capturedPct = o.pnlPctCaptured != null
+          ? `<span class="${o.pnlPctCaptured >= 0 ? 'text-green-600' : 'text-red-500'}">${o.pnlPctCaptured.toFixed(1)}%</span>`
+          : '<span class="text-gray-400">—</span>';
+        return `
+          <tr class="transition-colors">
+            <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+              ${o.ticker}
+              <div class="text-xs text-gray-400 font-normal hidden md:block truncate max-w-[120px]">${o.name}</div>
+            </td>
+            <td class="px-4 py-3 text-center">${typeBadge}</td>
+            <td class="px-4 py-3 num text-gray-700">$${o.strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+            <td class="px-4 py-3 text-gray-600 text-xs hidden sm:table-cell whitespace-nowrap">${o.expiry}</td>
+            <td class="px-4 py-3 num">${dteDisplay(o.dte)}</td>
+            <td class="px-4 py-3 num text-gray-600 hidden md:table-cell">${o.qty}</td>
+            <td class="px-4 py-3 num text-gray-500 hidden lg:table-cell">${fmt.usd(o.premium)}</td>
+            <td class="px-4 py-3 num text-gray-700 hidden lg:table-cell">${o.underlyingPrice != null ? fmt.usd(o.underlyingPrice) : '<span class="text-gray-400">—</span>'}</td>
+            <td class="px-4 py-3 num whitespace-nowrap">${otmDisplay(o.otmPct)}</td>
+            <td class="px-4 py-3 num ${pnlColor(o.unrealizedPnl)} hidden sm:table-cell">${fmt.pnl(o.unrealizedPnl)}</td>
+            <td class="px-4 py-3 num hidden md:table-cell">${capturedPct}</td>
+            <td class="px-4 py-3 text-center">${statusBadge(o.status)}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    // ── Stats helpers ───────────────────────────────────────────
+
+    /** Compact stat card used in both summary strips */
+    function statCard(label, mainHtml, subHtml = '') {
+      return `
+        <div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
+          <p class="text-xs text-gray-500 mb-1">${label}</p>
+          <p class="text-sm font-semibold leading-tight">${mainHtml}</p>
+          ${subHtml ? `<p class="text-xs text-gray-400 mt-0.5">${subHtml}</p>` : ''}
+        </div>`;
+    }
+
+    function renderStockStats(stocks) {
+      if (!stocks.length) { document.getElementById('stocks-stats').innerHTML = ''; return; }
+
+      const totalMktValue  = stocks.reduce((s, r) => s + (r.mktValue  ?? 0), 0);
+      const totalCostBasis = stocks.reduce((s, r) => s + (r.avgCost   ?? 0) * (r.qty ?? 0), 0);
+      const totalPnl       = stocks.reduce((s, r) => s + (r.unrealizedPnl ?? 0), 0);
+      const totalPnlPct    = totalCostBasis ? totalPnl / totalCostBasis * 100 : null;
+
+      const withPct  = stocks.filter(r => r.pnlPct != null);
+      const best  = withPct.length ? withPct.reduce((a, b) => b.pnlPct > a.pnlPct ? b : a) : null;
+      const worst = withPct.length ? withPct.reduce((a, b) => b.pnlPct < a.pnlPct ? b : a) : null;
+
+      document.getElementById('stocks-stats').innerHTML = [
+        statCard('Total Market Value',  `<span class="text-gray-900">${fmt.usd(totalMktValue)}</span>`),
+        statCard('Total Cost Basis',    `<span class="text-gray-900">${fmt.usd(totalCostBasis)}</span>`),
+        statCard('Unrealized P&amp;L',
+          `<span class="${pnlColor(totalPnl)}">${fmt.pnl(totalPnl)}</span>`,
+          totalPnlPct != null ? `<span class="${pnlColor(totalPnlPct)}">${fmt.pct(totalPnlPct)} return</span>` : ''),
+        best  ? statCard('Best Performer',
+          `<span class="text-green-600 font-bold">${best.ticker}</span>`,
+          `<span class="text-green-600">${fmt.pct(best.pnlPct)}</span>`) : '',
+        worst ? statCard('Worst Performer',
+          `<span class="text-red-600 font-bold">${worst.ticker}</span>`,
+          `<span class="text-red-600">${fmt.pct(worst.pnlPct)}</span>`) : '',
+      ].join('');
+    }
+
+    function renderOptionsStats(options) {
+      if (!options.length) { document.getElementById('options-stats').innerHTML = ''; return; }
+
+      const maxPremium   = options.reduce((s, o) => s + (o.maxProfit     ?? 0), 0);
+      const pnlCaptured  = options.reduce((s, o) => s + (o.unrealizedPnl ?? 0), 0);
+      const pctCaptured  = maxPremium ? pnlCaptured / maxPremium * 100 : null;
+      // Cost to close all open (non-expired) positions right now
+      const openExposure = options
+        .filter(o => o.dte == null || o.dte > 0)
+        .reduce((s, o) => s + Math.abs(o.mktValue ?? 0), 0);
+      const expiringCount = options.filter(o => o.dte != null && o.dte >= 0 && o.dte <= 7).length;
+      const otmValues = options.filter(o => o.otmPct != null && o.dte != null && o.dte > 0).map(o => o.otmPct);
+      const avgOtm = otmValues.length ? otmValues.reduce((s, v) => s + v, 0) / otmValues.length : null;
+
+      // Captured progress bar (capped at 100%)
+      const barPct  = Math.min(Math.max(pctCaptured ?? 0, 0), 100);
+      const barColor = barPct >= 75 ? '#16A34A' : barPct >= 40 ? '#D97706' : '#2563EB';
+      const capturedBar = `
+        <div class="w-full bg-gray-100 rounded-full h-1 mt-1.5">
+          <div style="width:${barPct.toFixed(1)}%;background:${barColor}" class="h-1 rounded-full transition-all"></div>
+        </div>`;
+
+      document.getElementById('options-stats').innerHTML = [
+        statCard('Max Premium at Expiry',
+          `<span class="text-gray-900">${fmt.usd(maxPremium)}</span>`,
+          'if all expire worthless'),
+        statCard('P&amp;L Captured',
+          `<span class="${pnlColor(pnlCaptured)}">${fmt.pnl(pnlCaptured)}</span>`,
+          `of ${fmt.usd(maxPremium)} max`),
+        // Captured % with inline progress bar — assembled manually
+        `<div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
+           <p class="text-xs text-gray-500 mb-1">% Captured</p>
+           <p class="text-sm font-semibold leading-tight">
+             <span class="${pctCaptured != null ? pnlColor(pctCaptured) : 'text-gray-400'}">
+               ${pctCaptured != null ? pctCaptured.toFixed(1) + '%' : '—'}
+             </span>
+           </p>
+           ${capturedBar}
+         </div>`,
+        statCard('Open Exposure',
+          `<span class="text-gray-900">${fmt.usd(openExposure)}</span>`,
+          'cost to close all now'),
+        statCard('Expiring ≤ 7 Days',
+          `<span class="${expiringCount > 0 ? 'text-red-600' : 'text-gray-400'}">${expiringCount > 0 ? expiringCount + (expiringCount === 1 ? ' position' : ' positions') : 'None'}</span>`),
+        statCard('Avg % OTM',
+          avgOtm != null
+            ? `<span class="${avgOtm < 0 ? 'text-red-600' : avgOtm < 8 ? 'text-red-500' : avgOtm < 15 ? 'text-amber-600' : 'text-green-600'}">${avgOtm >= 0 ? '+' : ''}${avgOtm.toFixed(1)}%</span>`
+            : '<span class="text-gray-400">—</span>',
+          'across active positions'),
+      ].join('');
+    }
+
+    function renderSkeleton() {
+      const miniSkel = () => `
+        <div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
+          <div class="skeleton h-2.5 w-16 mb-2"></div>
+          <div class="skeleton h-4 w-24"></div>
+        </div>`;
+
+      document.getElementById('summary-grid').innerHTML = Array(5).fill(0).map(() => `
+        <div class="bg-white rounded-lg border border-gray-200 px-4 py-3.5">
+          <div class="skeleton h-3 w-20 mb-2"></div>
+          <div class="skeleton h-6 w-28"></div>
+        </div>`).join('');
+      document.getElementById('stocks-stats').innerHTML  = Array(5).fill(0).map(miniSkel).join('');
+      document.getElementById('options-stats').innerHTML = Array(6).fill(0).map(miniSkel).join('');
+      ['stocks-body', 'options-body'].forEach(id => {
+        document.getElementById(id).innerHTML = Array(3).fill(0).map(() => `
+          <tr>${Array(8).fill(0).map(() =>
+            `<td class="px-4 py-3"><div class="skeleton h-4 w-full rounded"></div></td>`).join('')}
+          </tr>`).join('');
+      });
+    }
+
+    // ── Gateway status ──────────────────────────────────────────
+
+    async function checkStatus() {
+      const dot = document.getElementById('dot');
+      const label = document.getElementById('dot-label');
+      try {
+        const d = await (await fetch('/api/status')).json();
+        if (d.ok) {
+          dot.className = 'w-2 h-2 rounded-full bg-green-400'; label.textContent = 'Connected';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-red-400'; label.textContent = 'Not authenticated';
+        }
+      } catch {
+        dot.className = 'w-2 h-2 rounded-full bg-gray-300'; label.textContent = 'Offline';
+      }
+    }
+
+    // ── Main load ───────────────────────────────────────────────
+
+    async function loadPortfolio() {
+      const btn  = document.getElementById('refresh-btn');
+      const icon = document.getElementById('refresh-icon');
+      const err  = document.getElementById('error-banner');
+
+      btn.disabled = true;
+      icon.classList.add('spinning');
+      err.classList.add('hidden');
+      renderSkeleton();
+
+      try {
+        const resp = await fetch('/api/portfolio');
+        const data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load portfolio');
+
+        renderSummary(data.account);
+
+        // Store originals, compute section stats, apply sort
+        rawStocks  = data.stocks;
+        rawOptions = data.options;
+        renderStockStats(rawStocks);
+        renderOptionsStats(rawOptions);
+        applySort('stocks');
+        applySort('options');
+
+        const ts = new Date(data.lastUpdated);
+        document.getElementById('last-updated').textContent =
+          'Updated ' + ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        checkStatus();
+
+      } catch (e) {
+        document.getElementById('error-msg').textContent = e.message;
+        err.classList.remove('hidden');
+        ['stocks-body', 'options-body'].forEach(id => {
+          document.getElementById(id).innerHTML =
+            `<tr><td colspan="12" class="px-4 py-6 text-center text-sm text-gray-400">Could not load data</td></tr>`;
+        });
+        document.getElementById('summary-grid').innerHTML = '';
+      } finally {
+        btn.disabled = false;
+        icon.classList.remove('spinning');
+      }
+    }
+
+    // Boot
+    loadPortfolio();
+  </script>
+</body>
+</html>
