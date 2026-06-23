@@ -6,22 +6,55 @@
   <title>IBKR Portfolio</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root { --brand: #2563EB; }
+    :root {
+      --color-page:           #FFFFFF;
+      --color-surface:        #F1F3F6;
+      --color-card:           #FFFFFF;
+      --color-border:         #D3D1C7;
+      --color-text-primary:   #444441;
+      --color-text-secondary: #888780;
+      --color-sapphire:       #378ADD;
+      --color-royal:          #185FA5;
+      --color-sapphire-subtle:#E6F1FB;
+      --color-coral:          #D85A30;
+      --color-coral-subtle:   #FAECE7;
+      --color-gain:           #1D9E75;
+      --color-gain-subtle:    #EAF3DE;
+      --color-loss:           #E24B4A;
+      --color-loss-subtle:    #FCEBEB;
+    }
+    [data-theme="dark"] {
+      --color-page:           #0F1117;
+      --color-surface:        #181C26;
+      --color-card:           #252A38;
+      --color-border:         #2E3447;
+      --color-text-primary:   #D3D1C7;
+      --color-text-secondary: #5F5E5A;
+      --color-sapphire:       #85B7EB;
+      --color-royal:          #B5D4F4;
+      --color-sapphire-subtle:#0C447C;
+      --color-coral:          #F0997B;
+      --color-coral-subtle:   #712B13;
+      --color-gain:           #5DCAA5;
+      --color-gain-subtle:    #085041;
+      --color-loss:           #F09595;
+      --color-loss-subtle:    #791F1F;
+    }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-      background: #F9FAFB;
-      color: #111827;
+      background: var(--color-page);
+      color: var(--color-text-primary);
     }
 
-    .data-table tbody tr:hover { background: #F3F4F6; }
+    .data-table tbody tr:hover { background: var(--color-surface); }
 
     @keyframes pulse-bg {
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.4; }
     }
     .skeleton {
-      background: #E5E7EB;
+      background: var(--color-border);
       border-radius: 4px;
       animation: pulse-bg 1.5s ease-in-out infinite;
     }
@@ -32,22 +65,10 @@
     .table-wrap {
       overflow-x: auto;
       border-radius: 8px;
-      border: 1px solid #E5E7EB;
+      border: 0.5px solid var(--color-border);
     }
 
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-
-    /* OTM bar */
-    .otm-bar {
-      display: inline-block;
-      width: 48px; height: 4px;
-      border-radius: 2px;
-      background: #E5E7EB;
-      vertical-align: middle;
-      margin-left: 4px;
-      overflow: hidden;
-    }
-    .otm-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
 
     /* Sortable headers */
     th.sortable {
@@ -55,7 +76,7 @@
       user-select: none;
       white-space: nowrap;
     }
-    th.sortable:hover { background: #EAECF0; color: #374151; }
+    th.sortable:hover { background: var(--color-surface); color: var(--color-text-primary); }
     th.sortable .sort-icon {
       display: inline-block;
       margin-left: 3px;
@@ -64,38 +85,112 @@
       vertical-align: middle;
       line-height: 1;
     }
-    th.sortable.sort-active { color: #2563EB; }
+    th.sortable.sort-active { color: var(--color-sapphire); }
     th.sortable.sort-active .sort-icon { opacity: 1; }
+
+    /* Backgrounds */
+    .bg-page    { background-color: var(--color-page); }
+    .bg-surface { background-color: var(--color-surface); }
+    .bg-card    { background-color: var(--color-card); }
+    .bg-sapphire        { background-color: var(--color-sapphire); }
+    .bg-sapphire-subtle { background-color: var(--color-sapphire-subtle); }
+    .bg-coral-subtle    { background-color: var(--color-coral-subtle); }
+    .bg-gain-subtle     { background-color: var(--color-gain-subtle); }
+    .bg-loss-subtle     { background-color: var(--color-loss-subtle); }
+
+    /* Text */
+    .text-primary   { color: var(--color-text-primary); }
+    .text-secondary { color: var(--color-text-secondary); }
+    .text-sapphire  { color: var(--color-sapphire); }
+    .text-royal     { color: var(--color-royal); }
+    .text-coral     { color: var(--color-coral); }
+    .text-gain      { color: var(--color-gain); }
+    .text-loss      { color: var(--color-loss); }
+
+    /* Borders */
+    .border-token { border-color: var(--color-border) !important; }
+    .border-loss  { border-color: var(--color-loss) !important; }
+
+    /* Dividers — replaces Tailwind divide-gray-100 on tbody */
+    .data-table tbody tr + tr { border-top: 0.5px solid var(--color-border); }
+
+    /* Badges */
+    .badge-put     { background-color: var(--color-sapphire-subtle); color: var(--color-sapphire); outline: 1px solid var(--color-sapphire); outline-offset: -1px; }
+    .badge-call    { background-color: var(--color-sapphire-subtle); color: var(--color-royal);    outline: 1px solid var(--color-royal);    outline-offset: -1px; }
+    .badge-safe    { background-color: var(--color-gain-subtle);     color: var(--color-gain);     outline: 1px solid var(--color-gain);     outline-offset: -1px; }
+    .badge-watch   { background-color: var(--color-coral-subtle);    color: var(--color-coral);    outline: 1px solid var(--color-coral);    outline-offset: -1px; }
+    .badge-risk    { background-color: var(--color-loss-subtle);     color: var(--color-loss);     outline: 1px solid var(--color-loss);     outline-offset: -1px; }
+    .badge-expired { background-color: var(--color-surface); color: var(--color-text-secondary);  outline: 1px solid var(--color-border);   outline-offset: -1px; }
+
+    /* Status dots */
+    .dot-connected { background-color: var(--color-gain); }
+    .dot-error     { background-color: var(--color-loss); }
+    .dot-offline   { background-color: var(--color-border); }
+
+    /* Progress bar track */
+    .bar-track { background-color: var(--color-surface); }
+
+    /* Refresh button overrides */
+    #refresh-btn { color: var(--color-sapphire); border-color: var(--color-sapphire-subtle); }
+    #refresh-btn:hover  { background-color: var(--color-sapphire-subtle); }
+    #refresh-btn:active { background-color: var(--color-sapphire-subtle); }
+
+    /* Theme toggle button */
+    .btn-theme {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.625rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--color-sapphire);
+      border: 0.5px solid var(--color-sapphire-subtle);
+      border-radius: 0.375rem;
+      background: transparent;
+      cursor: pointer;
+    }
+    .btn-theme:hover { background-color: var(--color-sapphire-subtle); }
+
+    /* Colour transitions */
+    body, header, main, section, div, td, th, span, button, a, p {
+      transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+    }
   </style>
 </head>
 <body class="min-h-screen">
 
   <!-- ─── HEADER ──────────────────────────────────────────────── -->
-  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+  <header class="bg-card border-b border-token sticky top-0 z-10">
     <div class="max-w-screen-xl mx-auto px-6 h-14 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center">
+        <div class="w-7 h-7 rounded-md bg-sapphire flex items-center justify-center">
           <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 13l4-4 4 4 4-6 4 3" />
           </svg>
         </div>
-        <span class="font-semibold text-gray-900 text-sm tracking-tight">IBKR Portfolio</span>
+        <span class="font-semibold text-primary text-sm tracking-tight">IBKR Portfolio</span>
       </div>
 
       <div class="flex items-center gap-4">
-        <div id="gateway-dot" class="flex items-center gap-1.5 text-xs text-gray-500">
-          <span id="dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
+        <div id="gateway-dot" class="flex items-center gap-1.5 text-xs text-secondary">
+          <span id="dot" class="w-2 h-2 rounded-full dot-offline"></span>
           <span id="dot-label">—</span>
         </div>
-        <span id="last-updated" class="text-xs text-gray-400 hidden sm:block"></span>
+        <span id="last-updated" class="text-xs text-secondary hidden sm:block"></span>
         <button id="refresh-btn" onclick="loadPortfolio()"
-          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200
-                 rounded-md hover:bg-blue-50 active:bg-blue-100 transition-colors">
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border
+                 rounded-md transition-colors">
           <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 4v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Refresh
+        </button>
+        <button id="theme-toggle" onclick="toggleTheme()" class="btn-theme" aria-label="Toggle colour theme">
+          <svg id="theme-icon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -105,16 +200,16 @@
   <main class="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
 
     <!-- Error banner -->
-    <div id="error-banner" class="hidden bg-red-50 border border-red-200 rounded-lg px-4 py-3
-         flex items-start gap-3 text-sm text-red-800">
-      <svg class="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <div id="error-banner" class="hidden bg-loss-subtle border border-loss rounded-lg px-4 py-3
+         flex items-start gap-3 text-sm text-loss">
+      <svg class="w-4 h-4 mt-0.5 shrink-0 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
       <div>
         <p id="error-msg" class="font-medium"></p>
-        <p class="text-red-600 mt-0.5">
+        <p class="text-loss mt-0.5">
           Make sure the IBKR Client Portal Gateway is running and you are logged in at
-          <a href="https://localhost:5001" target="_blank" class="underline hover:text-red-900">https://localhost:5001</a>
+          <a href="https://localhost:5001" target="_blank" class="underline hover:text-primary">https://localhost:5001</a>
         </p>
       </div>
     </div>
@@ -127,9 +222,9 @@
     <!-- ── STOCK POSITIONS ──────────────────────────────────── -->
     <section>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">
           Stock Positions
-          <span id="stocks-count" class="ml-1.5 text-xs font-normal text-gray-400"></span>
+          <span id="stocks-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
         </h2>
       </div>
       <!-- Stock summary stats -->
@@ -138,7 +233,7 @@
       <div class="table-wrap">
         <table id="stocks-table" class="data-table w-full text-sm border-collapse">
           <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
+            <tr class="bg-surface border-b border-token">
               <th class="px-4 py-2.5 text-left   sortable sort-active" data-col="ticker"        onclick="handleSort('stocks','ticker')">        Symbol        <span class="sort-icon">↑</span></th>
               <th class="px-4 py-2.5 text-left   sortable hidden md:table-cell" data-col="name" onclick="handleSort('stocks','name')">          Name          <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="qty"                        onclick="handleSort('stocks','qty')">           Qty           <span class="sort-icon">↕</span></th>
@@ -149,7 +244,7 @@
               <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="pnlPct"      onclick="handleSort('stocks','pnlPct')">     P&amp;L %    <span class="sort-icon">↕</span></th>
             </tr>
           </thead>
-          <tbody id="stocks-body" class="divide-y divide-gray-100 bg-white"></tbody>
+          <tbody id="stocks-body" class="bg-card"></tbody>
         </table>
       </div>
     </section>
@@ -157,23 +252,18 @@
     <!-- ── OPTIONS POSITIONS ────────────────────────────────── -->
     <section>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">
           Options Positions
-          <span id="options-count" class="ml-1.5 text-xs font-normal text-gray-400"></span>
+          <span id="options-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
         </h2>
-        <div class="hidden sm:flex items-center gap-3 text-xs text-gray-500">
-          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-green-500"></span> Safe</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span> Watch</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-red-500"></span> At Risk</span>
-        </div>
       </div>
       <!-- Options summary stats -->
-      <div id="options-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4"></div>
+      <div id="options-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4"></div>
 
       <div class="table-wrap">
         <table id="options-table" class="data-table w-full text-sm border-collapse">
           <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
+            <tr class="bg-surface border-b border-token">
               <th class="px-4 py-2.5 text-left   sortable sort-active" data-col="ticker"           onclick="handleSort('options','ticker')">           Symbol      <span class="sort-icon">↑</span></th>
               <th class="px-4 py-2.5 text-center sortable" data-col="type"                          onclick="handleSort('options','type')">             Type        <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="strike"                        onclick="handleSort('options','strike')">           Strike      <span class="sort-icon">↕</span></th>
@@ -183,12 +273,13 @@
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="premium"  onclick="handleSort('options','premium')">          Premium     <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="underlyingPrice" onclick="handleSort('options','underlyingPrice')"> Underlying  <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="otmPct"                        onclick="handleSort('options','otmPct')">           % OTM       <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="delta"                         onclick="handleSort('options','delta')">            Delta       <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="unrealizedPnl" onclick="handleSort('options','unrealizedPnl')"> P&amp;L    <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden md:table-cell" data-col="pnlPctCaptured" onclick="handleSort('options','pnlPctCaptured')"> Captured <span class="sort-icon">↕</span></th>
-              <th class="px-4 py-2.5 text-center sortable" data-col="status"                        onclick="handleSort('options','status')">           Status      <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden xl:table-cell" data-col="exposure" onclick="handleSort('options','exposure')">          Exposure    <span class="sort-icon">↕</span></th>
             </tr>
           </thead>
-          <tbody id="options-body" class="divide-y divide-gray-100 bg-white"></tbody>
+          <tbody id="options-body" class="bg-card"></tbody>
         </table>
       </div>
     </section>
@@ -211,39 +302,49 @@
     };
 
     function pnlColor(v) {
-      if (v == null) return 'text-gray-400';
-      return v >= 0 ? 'text-green-600' : 'text-red-600';
+      if (v == null) return 'text-secondary';
+      return v >= 0 ? 'text-gain' : 'text-loss';
     }
 
     function statusBadge(status) {
       const map = {
-        safe:    ['bg-green-50 text-green-700 ring-green-600/20',  'Safe'],
-        watch:   ['bg-amber-50 text-amber-700 ring-amber-600/20',  'Watch'],
-        risk:    ['bg-red-50   text-red-700   ring-red-600/20',    'At Risk'],
-        expired: ['bg-gray-100 text-gray-500  ring-gray-500/20',   'Expired'],
-        unknown: ['bg-gray-100 text-gray-500  ring-gray-500/20',   '—'],
+        safe:    ['badge-safe',    'Safe'],
+        watch:   ['badge-watch',   'Watch'],
+        risk:    ['badge-risk',    'At Risk'],
+        expired: ['badge-expired', 'Expired'],
+        unknown: ['badge-expired', '—'],
       };
       const [cls, label] = map[status] ?? map.unknown;
-      return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}">${label}</span>`;
+      return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}">${label}</span>`;
     }
 
     function otmDisplay(pct) {
-      if (pct == null) return '<span class="text-gray-400">—</span>';
-      let textCls, fillColor, barWidth;
-      if (pct < 0)       { textCls = 'text-red-600 font-semibold'; fillColor = '#DC2626'; barWidth = '0%'; }
-      else if (pct < 8)  { textCls = 'text-red-500';  fillColor = '#EF4444'; barWidth = Math.min(pct / 8 * 40, 40) + '%'; }
-      else if (pct < 15) { textCls = 'text-amber-600'; fillColor = '#D97706'; barWidth = Math.min(pct / 15 * 65, 65) + '%'; }
-      else               { textCls = 'text-green-600'; fillColor = '#16A34A'; barWidth = Math.min(pct / 30 * 100, 100) + '%'; }
-      return `<span class="${textCls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>
-              <span class="otm-bar"><span class="otm-bar-fill" style="width:${barWidth};background:${fillColor}"></span></span>`;
+      if (pct == null) return '<span class="text-secondary">—</span>';
+      let textCls;
+      if (pct < 0)       textCls = 'text-loss font-semibold';
+      else if (pct < 8)  textCls = 'text-loss';
+      else if (pct < 15) textCls = 'text-coral';
+      else               textCls = 'text-gain';
+      return `<span class="${textCls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+    }
+
+    function deltaDisplay(delta) {
+      if (delta == null) return '<span class="text-secondary">—</span>';
+      const abs = Math.abs(delta);
+      let cls;
+      if (abs < 0.15)      cls = 'text-gain';
+      else if (abs < 0.30) cls = 'text-coral';
+      else                 cls = 'text-loss font-semibold';
+      const sign = delta >= 0 ? '+' : '';
+      return `<span class="${cls}" title="Prob ITM ≈ ${(abs * 100).toFixed(0)}%">${sign}${delta.toFixed(2)}</span>`;
     }
 
     function dteDisplay(dte) {
-      if (dte == null)  return '<span class="text-gray-400">—</span>';
-      if (dte <= 0)     return `<span class="text-gray-400 line-through">${dte}d</span>`;
-      if (dte <= 5)     return `<span class="text-red-600 font-semibold">${dte}d</span>`;
-      if (dte <= 14)    return `<span class="text-amber-600">${dte}d</span>`;
-      return `<span class="text-gray-700">${dte}d</span>`;
+      if (dte == null)  return '<span class="text-secondary">—</span>';
+      if (dte <= 0)     return `<span class="text-secondary line-through">${dte}d</span>`;
+      if (dte <= 5)     return `<span class="text-loss font-semibold">${dte}d</span>`;
+      if (dte <= 14)    return `<span class="text-coral">${dte}d</span>`;
+      return `<span class="text-primary">${dte}d</span>`;
     }
 
     // ── Sort state ──────────────────────────────────────────────
@@ -269,11 +370,16 @@
       options: {
         ticker: 'str', type: 'str', strike: 'num', dte: 'num',
         qty: 'num', premium: 'num', underlyingPrice: 'num',
-        otmPct: 'num', unrealizedPnl: 'num', pnlPctCaptured: 'num', status: 'status',
+        otmPct: 'num', delta: 'num', unrealizedPnl: 'num', pnlPctCaptured: 'num',
+        exposure: 'num',
       },
     };
 
     function getVal(row, key, type) {
+      if (key === 'exposure') {
+        const v = calcExposure(row);
+        return v == null ? -Infinity : v;
+      }
       const v = row[key];
       if (v == null) return type === 'str' ? '￿' : -Infinity; // nulls sort last
       if (type === 'status') return STATUS_ORDER[v] ?? 99;
@@ -340,10 +446,10 @@
         { label: 'Excess Liquidity', value: fmt.usd(acct.excessLiquidity),pnlVal: null },
       ];
       document.getElementById('summary-grid').innerHTML = metrics.map(m => {
-        const color = m.pnlVal != null ? pnlColor(m.pnlVal) : 'text-gray-900';
+        const color = m.pnlVal != null ? pnlColor(m.pnlVal) : 'text-primary';
         return `
-          <div class="bg-white rounded-lg border border-gray-200 px-4 py-3.5 shadow-sm">
-            <p class="text-xs text-gray-500 mb-1">${m.label}</p>
+          <div class="bg-card rounded-lg border border-token px-4 py-3.5 shadow-sm">
+            <p class="text-xs text-secondary mb-1">${m.label}</p>
             <p class="text-lg font-semibold ${color} leading-tight">${m.value}</p>
           </div>`;
       }).join('');
@@ -353,56 +459,69 @@
       document.getElementById('stocks-count').textContent = `(${stocks.length})`;
       const tbody = document.getElementById('stocks-body');
       if (!stocks.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-gray-400">No stock positions</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-secondary">No stock positions</td></tr>`;
         return;
       }
       tbody.innerHTML = stocks.map(s => `
         <tr class="transition-colors">
-          <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+          <td class="px-4 py-3 font-medium text-primary whitespace-nowrap">
             ${s.ticker}
-            <div class="text-xs text-gray-400 font-normal hidden md:block">${s.name}</div>
+            <div class="text-xs text-secondary font-normal hidden md:block">${s.name}</div>
           </td>
-          <td class="px-4 py-3 hidden md:table-cell text-gray-600 text-xs max-w-[160px] truncate">${s.name}</td>
-          <td class="px-4 py-3 num text-gray-700">${fmt.int(s.qty)}</td>
-          <td class="px-4 py-3 num text-gray-700">${fmt.usd(s.mktPrice)}</td>
-          <td class="px-4 py-3 num text-gray-700 hidden sm:table-cell">${fmt.usd(s.mktValue)}</td>
-          <td class="px-4 py-3 num text-gray-500 hidden lg:table-cell">${fmt.usd(s.avgCost)}</td>
+          <td class="px-4 py-3 hidden md:table-cell text-secondary text-xs max-w-[160px] truncate">${s.name}</td>
+          <td class="px-4 py-3 num text-primary">${fmt.int(s.qty)}</td>
+          <td class="px-4 py-3 num text-primary">${fmt.usd(s.mktPrice)}</td>
+          <td class="px-4 py-3 num text-primary hidden sm:table-cell">${fmt.usd(s.mktValue)}</td>
+          <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${fmt.usd(s.avgCost)}</td>
           <td class="px-4 py-3 num ${pnlColor(s.unrealizedPnl)}">${fmt.pnl(s.unrealizedPnl)}</td>
           <td class="px-4 py-3 num ${pnlColor(s.pnlPct)} hidden sm:table-cell">${fmt.pct(s.pnlPct)}</td>
         </tr>`).join('');
+    }
+
+    function calcExposure(o) {
+      if (o.qty >= 0) return null;
+      const contracts = Math.abs(o.qty);
+      return o.type === 'P'
+        ? contracts * 100 * o.strike
+        : contracts * 100 * (o.underlyingPrice ?? o.strike);
     }
 
     function renderOptions(options) {
       document.getElementById('options-count').textContent = `(${options.length})`;
       const tbody = document.getElementById('options-body');
       if (!options.length) {
-        tbody.innerHTML = `<tr><td colspan="12" class="px-4 py-6 text-center text-sm text-gray-400">No options positions</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="px-4 py-6 text-center text-sm text-secondary">No options positions</td></tr>`;
         return;
       }
       tbody.innerHTML = options.map(o => {
         const typeBadge = o.type === 'P'
-          ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold bg-blue-50 text-blue-700">PUT</span>`
-          : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold bg-purple-50 text-purple-700">CALL</span>`;
+          ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-put">PUT</span>`
+          : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-call">CALL</span>`;
         const capturedPct = o.pnlPctCaptured != null
-          ? `<span class="${o.pnlPctCaptured >= 0 ? 'text-green-600' : 'text-red-500'}">${o.pnlPctCaptured.toFixed(1)}%</span>`
-          : '<span class="text-gray-400">—</span>';
+          ? `<span class="${o.pnlPctCaptured >= 0 ? 'text-gain' : 'text-loss'}">${o.pnlPctCaptured.toFixed(1)}%</span>`
+          : '<span class="text-secondary">—</span>';
+        const exposure = calcExposure(o);
+        const exposureHtml = exposure != null
+          ? `<span class="text-primary" title="${o.type === 'P' ? 'Assignment value: shares × strike' : 'Cover value: shares × current price'}">${fmt.usd(exposure)}</span>`
+          : '<span class="text-secondary">—</span>';
         return `
           <tr class="transition-colors">
-            <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+            <td class="px-4 py-3 font-medium text-primary whitespace-nowrap">
               ${o.ticker}
-              <div class="text-xs text-gray-400 font-normal hidden md:block truncate max-w-[120px]">${o.name}</div>
+              <div class="text-xs text-secondary font-normal hidden md:block truncate max-w-[120px]">${o.name}</div>
             </td>
             <td class="px-4 py-3 text-center">${typeBadge}</td>
-            <td class="px-4 py-3 num text-gray-700">$${o.strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-            <td class="px-4 py-3 text-gray-600 text-xs hidden sm:table-cell whitespace-nowrap">${o.expiry}</td>
+            <td class="px-4 py-3 num text-primary">$${o.strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+            <td class="px-4 py-3 text-secondary text-xs hidden sm:table-cell whitespace-nowrap">${o.expiry}</td>
             <td class="px-4 py-3 num">${dteDisplay(o.dte)}</td>
-            <td class="px-4 py-3 num text-gray-600 hidden md:table-cell">${o.qty}</td>
-            <td class="px-4 py-3 num text-gray-500 hidden lg:table-cell">${fmt.usd(o.premium)}</td>
-            <td class="px-4 py-3 num text-gray-700 hidden lg:table-cell">${o.underlyingPrice != null ? fmt.usd(o.underlyingPrice) : '<span class="text-gray-400">—</span>'}</td>
+            <td class="px-4 py-3 num text-secondary hidden md:table-cell">${o.qty}</td>
+            <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${fmt.usd(o.premium)}</td>
+            <td class="px-4 py-3 num text-primary hidden lg:table-cell">${o.underlyingPrice != null ? fmt.usd(o.underlyingPrice) : '<span class="text-secondary">—</span>'}</td>
             <td class="px-4 py-3 num whitespace-nowrap">${otmDisplay(o.otmPct)}</td>
+            <td class="px-4 py-3 num">${deltaDisplay(o.delta)}</td>
             <td class="px-4 py-3 num ${pnlColor(o.unrealizedPnl)} hidden sm:table-cell">${fmt.pnl(o.unrealizedPnl)}</td>
             <td class="px-4 py-3 num hidden md:table-cell">${capturedPct}</td>
-            <td class="px-4 py-3 text-center">${statusBadge(o.status)}</td>
+            <td class="px-4 py-3 num hidden xl:table-cell">${exposureHtml}</td>
           </tr>`;
       }).join('');
     }
@@ -412,10 +531,10 @@
     /** Compact stat card used in both summary strips */
     function statCard(label, mainHtml, subHtml = '') {
       return `
-        <div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
-          <p class="text-xs text-gray-500 mb-1">${label}</p>
+        <div class="bg-card rounded-lg border border-token px-3.5 py-3">
+          <p class="text-xs text-secondary mb-1">${label}</p>
           <p class="text-sm font-semibold leading-tight">${mainHtml}</p>
-          ${subHtml ? `<p class="text-xs text-gray-400 mt-0.5">${subHtml}</p>` : ''}
+          ${subHtml ? `<p class="text-xs text-secondary mt-0.5">${subHtml}</p>` : ''}
         </div>`;
     }
 
@@ -432,17 +551,17 @@
       const worst = withPct.length ? withPct.reduce((a, b) => b.pnlPct < a.pnlPct ? b : a) : null;
 
       document.getElementById('stocks-stats').innerHTML = [
-        statCard('Total Market Value',  `<span class="text-gray-900">${fmt.usd(totalMktValue)}</span>`),
-        statCard('Total Cost Basis',    `<span class="text-gray-900">${fmt.usd(totalCostBasis)}</span>`),
+        statCard('Total Market Value',  `<span class="text-primary">${fmt.usd(totalMktValue)}</span>`),
+        statCard('Total Cost Basis',    `<span class="text-primary">${fmt.usd(totalCostBasis)}</span>`),
         statCard('Unrealized P&amp;L',
           `<span class="${pnlColor(totalPnl)}">${fmt.pnl(totalPnl)}</span>`,
           totalPnlPct != null ? `<span class="${pnlColor(totalPnlPct)}">${fmt.pct(totalPnlPct)} return</span>` : ''),
         best  ? statCard('Best Performer',
-          `<span class="text-green-600 font-bold">${best.ticker}</span>`,
-          `<span class="text-green-600">${fmt.pct(best.pnlPct)}</span>`) : '',
+          `<span class="text-gain font-bold">${best.ticker}</span>`,
+          `<span class="text-gain">${fmt.pct(best.pnlPct)}</span>`) : '',
         worst ? statCard('Worst Performer',
-          `<span class="text-red-600 font-bold">${worst.ticker}</span>`,
-          `<span class="text-red-600">${fmt.pct(worst.pnlPct)}</span>`) : '',
+          `<span class="text-loss font-bold">${worst.ticker}</span>`,
+          `<span class="text-loss">${fmt.pct(worst.pnlPct)}</span>`) : '',
       ].join('');
     }
 
@@ -452,66 +571,92 @@
       const maxPremium   = options.reduce((s, o) => s + (o.maxProfit     ?? 0), 0);
       const pnlCaptured  = options.reduce((s, o) => s + (o.unrealizedPnl ?? 0), 0);
       const pctCaptured  = maxPremium ? pnlCaptured / maxPremium * 100 : null;
-      // Cost to close all open (non-expired) positions right now
       const openExposure = options
         .filter(o => o.dte == null || o.dte > 0)
         .reduce((s, o) => s + Math.abs(o.mktValue ?? 0), 0);
-      const expiringCount = options.filter(o => o.dte != null && o.dte >= 0 && o.dte <= 7).length;
+
+      const expiring     = options.filter(o => o.dte != null && o.dte >= 0 && o.dte <= 7);
+      const expiringCount   = expiring.length;
+      const expiringPremium = expiring.reduce((s, o) => s + (o.maxProfit ?? 0), 0);
+
       const otmValues = options.filter(o => o.otmPct != null && o.dte != null && o.dte > 0).map(o => o.otmPct);
       const avgOtm = otmValues.length ? otmValues.reduce((s, v) => s + v, 0) / otmValues.length : null;
 
-      // Captured progress bar (capped at 100%)
+      // Put assignment exposure: sold puts only — cash needed if assigned (contracts × 100 × strike)
+      const putExposure = options
+        .filter(o => o.type === 'P' && o.qty < 0)
+        .reduce((s, o) => s + Math.abs(o.qty) * 100 * o.strike, 0);
+
+      // Call cover exposure: sold calls only — cost to acquire shares (contracts × 100 × underlying)
+      const callExposure = options
+        .filter(o => o.type === 'C' && o.qty < 0)
+        .reduce((s, o) => s + Math.abs(o.qty) * 100 * (o.underlyingPrice ?? o.strike), 0);
+
       const barPct  = Math.min(Math.max(pctCaptured ?? 0, 0), 100);
-      const barColor = barPct >= 75 ? '#16A34A' : barPct >= 40 ? '#D97706' : '#2563EB';
+      const cs = getComputedStyle(document.documentElement);
+      const barColor = barPct >= 75
+        ? cs.getPropertyValue('--color-gain').trim()
+        : barPct >= 40
+          ? cs.getPropertyValue('--color-coral').trim()
+          : cs.getPropertyValue('--color-sapphire').trim();
       const capturedBar = `
-        <div class="w-full bg-gray-100 rounded-full h-1 mt-1.5">
+        <div class="w-full bar-track rounded-full h-1 mt-1.5">
           <div style="width:${barPct.toFixed(1)}%;background:${barColor}" class="h-1 rounded-full transition-all"></div>
         </div>`;
 
       document.getElementById('options-stats').innerHTML = [
         statCard('Max Premium at Expiry',
-          `<span class="text-gray-900">${fmt.usd(maxPremium)}</span>`,
+          `<span class="text-primary">${fmt.usd(maxPremium)}</span>`,
           'if all expire worthless'),
-        statCard('P&amp;L Captured',
-          `<span class="${pnlColor(pnlCaptured)}">${fmt.pnl(pnlCaptured)}</span>`,
-          `of ${fmt.usd(maxPremium)} max`),
-        // Captured % with inline progress bar — assembled manually
-        `<div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
-           <p class="text-xs text-gray-500 mb-1">% Captured</p>
-           <p class="text-sm font-semibold leading-tight">
-             <span class="${pctCaptured != null ? pnlColor(pctCaptured) : 'text-gray-400'}">
-               ${pctCaptured != null ? pctCaptured.toFixed(1) + '%' : '—'}
+        `<div class="bg-card rounded-lg border border-token px-3.5 py-3">
+           <p class="text-xs text-secondary mb-1">P&amp;L Captured</p>
+           <p class="text-sm font-semibold leading-tight flex items-baseline gap-1.5">
+             <span class="${pnlColor(pnlCaptured)}">${fmt.pnl(pnlCaptured)}</span>
+             <span class="text-xs font-normal ${pctCaptured != null ? pnlColor(pctCaptured) : 'text-secondary'}">
+               ${pctCaptured != null ? '(' + pctCaptured.toFixed(1) + '%)' : ''}
              </span>
            </p>
            ${capturedBar}
+           <p class="text-xs text-secondary mt-0.5">of ${fmt.usd(maxPremium)} max</p>
          </div>`,
         statCard('Open Exposure',
-          `<span class="text-gray-900">${fmt.usd(openExposure)}</span>`,
+          `<span class="text-primary">${fmt.usd(openExposure)}</span>`,
           'cost to close all now'),
-        statCard('Expiring ≤ 7 Days',
-          `<span class="${expiringCount > 0 ? 'text-red-600' : 'text-gray-400'}">${expiringCount > 0 ? expiringCount + (expiringCount === 1 ? ' position' : ' positions') : 'None'}</span>`),
+        `<div class="bg-card rounded-lg border border-token px-3.5 py-3">
+           <p class="text-xs text-secondary mb-1">Expiring ≤ 7 Days</p>
+           <p class="text-sm font-semibold leading-tight ${expiringCount > 0 ? 'text-loss' : 'text-secondary'}">
+             ${expiringCount > 0 ? expiringCount + (expiringCount === 1 ? ' position' : ' positions') : 'None'}
+           </p>
+           ${expiringCount > 0 ? `<p class="text-xs text-gain mt-0.5 font-medium">${fmt.usd(expiringPremium)} if all expire</p>` : ''}
+         </div>`,
         statCard('Avg % OTM',
           avgOtm != null
-            ? `<span class="${avgOtm < 0 ? 'text-red-600' : avgOtm < 8 ? 'text-red-500' : avgOtm < 15 ? 'text-amber-600' : 'text-green-600'}">${avgOtm >= 0 ? '+' : ''}${avgOtm.toFixed(1)}%</span>`
-            : '<span class="text-gray-400">—</span>',
+            ? `<span class="${avgOtm < 0 ? 'text-loss' : avgOtm < 8 ? 'text-loss' : avgOtm < 15 ? 'text-coral' : 'text-gain'}">${avgOtm >= 0 ? '+' : ''}${avgOtm.toFixed(1)}%</span>`
+            : '<span class="text-secondary">—</span>',
           'across active positions'),
+        statCard('Put Assignment',
+          `<span class="text-primary">${fmt.usd(putExposure)}</span>`,
+          'if all sold puts assigned'),
+        statCard('Call Cover',
+          `<span class="text-primary">${fmt.usd(callExposure)}</span>`,
+          'to cover all sold calls'),
       ].join('');
     }
 
     function renderSkeleton() {
       const miniSkel = () => `
-        <div class="bg-white rounded-lg border border-gray-200 px-3.5 py-3">
+        <div class="bg-card rounded-lg border border-token px-3.5 py-3">
           <div class="skeleton h-2.5 w-16 mb-2"></div>
           <div class="skeleton h-4 w-24"></div>
         </div>`;
 
       document.getElementById('summary-grid').innerHTML = Array(5).fill(0).map(() => `
-        <div class="bg-white rounded-lg border border-gray-200 px-4 py-3.5">
+        <div class="bg-card rounded-lg border border-token px-4 py-3.5">
           <div class="skeleton h-3 w-20 mb-2"></div>
           <div class="skeleton h-6 w-28"></div>
         </div>`).join('');
       document.getElementById('stocks-stats').innerHTML  = Array(5).fill(0).map(miniSkel).join('');
-      document.getElementById('options-stats').innerHTML = Array(6).fill(0).map(miniSkel).join('');
+      document.getElementById('options-stats').innerHTML = Array(7).fill(0).map(miniSkel).join('');
       ['stocks-body', 'options-body'].forEach(id => {
         document.getElementById(id).innerHTML = Array(3).fill(0).map(() => `
           <tr>${Array(8).fill(0).map(() =>
@@ -528,12 +673,12 @@
       try {
         const d = await (await fetch('/api/status')).json();
         if (d.ok) {
-          dot.className = 'w-2 h-2 rounded-full bg-green-400'; label.textContent = 'Connected';
+          dot.className = 'w-2 h-2 rounded-full dot-connected'; label.textContent = 'Connected';
         } else {
-          dot.className = 'w-2 h-2 rounded-full bg-red-400'; label.textContent = 'Not authenticated';
+          dot.className = 'w-2 h-2 rounded-full dot-error'; label.textContent = 'Not authenticated';
         }
       } catch {
-        dot.className = 'w-2 h-2 rounded-full bg-gray-300'; label.textContent = 'Offline';
+        dot.className = 'w-2 h-2 rounded-full dot-offline'; label.textContent = 'Offline';
       }
     }
 
@@ -574,7 +719,7 @@
         err.classList.remove('hidden');
         ['stocks-body', 'options-body'].forEach(id => {
           document.getElementById(id).innerHTML =
-            `<tr><td colspan="12" class="px-4 py-6 text-center text-sm text-gray-400">Could not load data</td></tr>`;
+            `<tr><td colspan="12" class="px-4 py-6 text-center text-sm text-secondary">Could not load data</td></tr>`;
         });
         document.getElementById('summary-grid').innerHTML = '';
       } finally {
@@ -583,7 +728,35 @@
       }
     }
 
+    // ── Theme ──────────────────────────────────────────────────
+    const MOON_PATH = 'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z';
+    const SUN_PATH  = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z';
+
+    function applyTheme(theme) {
+      const html     = document.documentElement;
+      const iconPath = document.querySelector('#theme-icon path');
+      if (theme === 'dark') {
+        html.setAttribute('data-theme', 'dark');
+        if (iconPath) iconPath.setAttribute('d', SUN_PATH);
+      } else {
+        html.removeAttribute('data-theme');
+        if (iconPath) iconPath.setAttribute('d', MOON_PATH);
+      }
+    }
+
+    function initTheme() {
+      applyTheme(localStorage.getItem('theme') ?? 'light');
+    }
+
+    function toggleTheme() {
+      const next = (localStorage.getItem('theme') ?? 'light') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('theme', next);
+      applyTheme(next);
+      if (rawOptions.length) renderOptionsStats(rawOptions);
+    }
+
     // Boot
+    initTheme();
     loadPortfolio();
   </script>
 </body>

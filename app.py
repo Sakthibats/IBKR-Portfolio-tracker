@@ -76,38 +76,62 @@ def get_positions(account_id: str) -> list[dict]:
     return data
 
 
-def get_market_prices(conids: list[int]) -> dict[int, float]:
+def _snapshot_fetch(conids: list[int], fields: str, extract: callable) -> dict[int, any]:
     """
-    Fetch last-trade prices for a list of contract IDs via the market data
-    snapshot endpoint.  IBKR uses a subscription model — the first call
-    registers the subscription; a second call (after a short delay) returns
-    the actual values.  Field 31 = last price.
+    Generic IBKR market-data snapshot fetch with subscription retry.
+    `extract(item)` maps a snapshot dict to the value to store; return None to skip.
     """
     if not conids:
         return {}
 
     conid_str = ",".join(str(c) for c in conids)
-    prices: dict[int, float] = {}
+    result: dict[int, any] = {}
 
     for attempt in range(3):
-        data = ibkr_get("/iserver/marketdata/snapshot", params={"conids": conid_str, "fields": "31"})
+        data = ibkr_get("/iserver/marketdata/snapshot", params={"conids": conid_str, "fields": fields})
         if isinstance(data, list):
             for item in data:
                 conid = item.get("conid")
-                raw = item.get("31")
-                if conid and raw and raw != "Subscribing...":
-                    try:
-                        prices[int(conid)] = float(str(raw).replace(",", ""))
-                    except (ValueError, TypeError):
-                        pass
+                if not conid:
+                    continue
+                value = extract(item)
+                if value is not None:
+                    result[int(conid)] = value
 
-        # If we got all prices, stop early
-        if len(prices) == len(conids):
+        if len(result) == len(conids):
             break
         if attempt < 2:
             time.sleep(0.6)
 
-    return prices
+    return result
+
+
+def get_market_prices(conids: list[int]) -> dict[int, float]:
+    """Fetch last-trade prices (field 31) for a list of contract IDs."""
+    def extract(item):
+        raw = item.get("31")
+        if raw and raw != "Subscribing...":
+            try:
+                return float(str(raw).replace(",", ""))
+            except (ValueError, TypeError):
+                pass
+        return None
+
+    return _snapshot_fetch(conids, "31", extract)
+
+
+def get_option_deltas(conids: list[int]) -> dict[int, float]:
+    """Fetch delta (field 7308) for a list of option contract IDs."""
+    def extract(item):
+        raw = item.get("7308")
+        if raw and raw != "Subscribing...":
+            try:
+                return round(float(str(raw).replace(",", "")), 4)
+            except (ValueError, TypeError):
+                pass
+        return None
+
+    return _snapshot_fetch(conids, "7308", extract)
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +237,10 @@ def build_portfolio(account_id: str) -> dict:
     live_prices = get_market_prices(missing_conids) if missing_conids else {}
     underlying_price_map = {**stock_price_map, **live_prices}
 
+    # Fetch delta for each option contract (field 7308)
+    opt_conids = [p["conid"] for p in opt_positions if p.get("conid")]
+    delta_map = get_option_deltas(opt_conids) if opt_conids else {}
+
     # Build stocks list
     for pos in positions:
         if pos.get("assetClass") != "STK":
@@ -251,8 +279,16 @@ def build_portfolio(account_id: str) -> dict:
             "currentPrice":  round(pos.get("mktPrice", 0.0), 4),
             "mktValue":      round(pos.get("mktValue", 0.0), 2),
             "unrealizedPnl": round(pos.get("unrealizedPnl", 0.0), 2),
+            "delta":         delta_map.get(pos.get("conid")),
             **metrics,
         })
+
+    # The /portfolio/summary endpoint returns null for unrealizedpnl — sum from positions instead
+    summary["unrealizedPnl"] = round(
+        sum(s.get("unrealizedPnl", 0) for s in stocks) +
+        sum(o.get("unrealizedPnl", 0) for o in options),
+        2,
+    )
 
     # Sort: stocks by ticker; options by status priority then ticker
     stocks.sort(key=lambda x: x["ticker"])
