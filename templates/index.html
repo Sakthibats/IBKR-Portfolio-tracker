@@ -4,41 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IBKR Portfolio</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231B2E4B'/><polyline points='4,24 10,17 16,19 22,10 28,14' stroke='%23D85A30' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='14' r='2.5' fill='%23D85A30'/></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
       --color-page:           #FFFFFF;
-      --color-surface:        #F1F3F6;
+      --color-surface:        #EEF3FA;
       --color-card:           #FFFFFF;
-      --color-border:         #D3D1C7;
-      --color-text-primary:   #444441;
-      --color-text-secondary: #888780;
-      --color-sapphire:       #378ADD;
-      --color-royal:          #185FA5;
-      --color-sapphire-subtle:#E6F1FB;
-      --color-coral:          #D85A30;
-      --color-coral-subtle:   #FAECE7;
-      --color-gain:           #1D9E75;
-      --color-gain-subtle:    #EAF3DE;
-      --color-loss:           #E24B4A;
-      --color-loss-subtle:    #FCEBEB;
+      --color-border:         #C5D3E8;
+      --color-text-primary:   #0F172A;
+      --color-text-secondary: #4A5E7A;
+      --color-sapphire:       #1B75CC;
+      --color-royal:          #134E9A;
+      --color-sapphire-subtle:#DFF0FF;
+      --color-coral:          #C84520;
+      --color-coral-subtle:   #FAE8E2;
+      --color-gain:           #0C8A5E;
+      --color-gain-subtle:    #DFFAF0;
+      --color-loss:           #D42828;
+      --color-loss-subtle:    #FDEAEA;
+      /* Header — light blue-tinted, cohesive with page */
+      --color-header-bg:      #EDF3FD;
+      --color-header-fg:      #0F172A;
+      --color-header-muted:   #4A5E7A;
     }
     [data-theme="dark"] {
-      --color-page:           #0F1117;
-      --color-surface:        #181C26;
-      --color-card:           #252A38;
-      --color-border:         #2E3447;
-      --color-text-primary:   #D3D1C7;
-      --color-text-secondary: #5F5E5A;
-      --color-sapphire:       #85B7EB;
-      --color-royal:          #B5D4F4;
-      --color-sapphire-subtle:#0C447C;
-      --color-coral:          #F0997B;
-      --color-coral-subtle:   #712B13;
-      --color-gain:           #5DCAA5;
-      --color-gain-subtle:    #085041;
-      --color-loss:           #F09595;
-      --color-loss-subtle:    #791F1F;
+      --color-page:           #080D18;
+      --color-surface:        #0F1929;
+      --color-card:           #162035;
+      --color-border:         #1E3050;
+      --color-text-primary:   #E8EBF2;
+      --color-text-secondary: #7A90B0;
+      --color-sapphire:       #5AAAE8;
+      --color-royal:          #90C4F8;
+      --color-sapphire-subtle:#0C3560;
+      --color-coral:          #F07855;
+      --color-coral-subtle:   #5C1C08;
+      --color-gain:           #3DC89A;
+      --color-gain-subtle:    #063D2C;
+      --color-loss:           #F06868;
+      --color-loss-subtle:    #5C1212;
+      /* Header — deepest navy, clearly distinct from page */
+      --color-header-bg:      #060E1C;
+      --color-header-fg:      #C8D8EC;
+      --color-header-muted:   #5A7090;
     }
 
     body {
@@ -93,10 +102,38 @@
     .bg-surface { background-color: var(--color-surface); }
     .bg-card    { background-color: var(--color-card); }
     .bg-sapphire        { background-color: var(--color-sapphire); }
+    .bg-coral           { background-color: var(--color-coral); }
     .bg-sapphire-subtle { background-color: var(--color-sapphire-subtle); }
     .bg-coral-subtle    { background-color: var(--color-coral-subtle); }
     .bg-gain-subtle     { background-color: var(--color-gain-subtle); }
     .bg-loss-subtle     { background-color: var(--color-loss-subtle); }
+
+    /* Header */
+    .bg-header {
+      background-color: var(--color-header-bg);
+      border-bottom: 2px solid var(--color-coral);
+    }
+    .text-header-fg    { color: var(--color-header-fg); }
+    .text-header-muted { color: var(--color-header-muted); }
+
+    /* Buttons inside dark-mode header only */
+    [data-theme="dark"] .bg-header #refresh-btn {
+      color: var(--color-header-fg);
+      border-color: rgba(255,255,255,0.15);
+    }
+    [data-theme="dark"] .bg-header #refresh-btn:hover  { background-color: rgba(255,255,255,0.07); }
+    [data-theme="dark"] .bg-header #refresh-btn:active { background-color: rgba(255,255,255,0.11); }
+    [data-theme="dark"] .bg-header .btn-theme {
+      color: var(--color-header-fg);
+      border-color: rgba(255,255,255,0.15);
+    }
+    [data-theme="dark"] .bg-header .btn-theme:hover { background-color: rgba(255,255,255,0.07); }
+
+    /* Section headings — coral left accent */
+    .section-heading {
+      border-left: 3px solid var(--color-coral);
+      padding-left: 0.625rem;
+    }
 
     /* Text */
     .text-primary   { color: var(--color-text-primary); }
@@ -160,23 +197,23 @@
 <body class="min-h-screen">
 
   <!-- ─── HEADER ──────────────────────────────────────────────── -->
-  <header class="bg-card border-b border-token sticky top-0 z-10">
+  <header class="bg-header sticky top-0 z-10">
     <div class="max-w-screen-xl mx-auto px-6 h-14 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-7 h-7 rounded-md bg-sapphire flex items-center justify-center">
+        <div class="w-7 h-7 rounded-md bg-coral flex items-center justify-center">
           <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 13l4-4 4 4 4-6 4 3" />
           </svg>
         </div>
-        <span class="font-semibold text-primary text-sm tracking-tight">IBKR Portfolio</span>
+        <span class="font-semibold text-header-fg text-sm tracking-tight">IBKR Portfolio</span>
       </div>
 
       <div class="flex items-center gap-4">
-        <div id="gateway-dot" class="flex items-center gap-1.5 text-xs text-secondary">
+        <div id="gateway-dot" class="flex items-center gap-1.5 text-xs text-header-muted">
           <span id="dot" class="w-2 h-2 rounded-full dot-offline"></span>
           <span id="dot-label">—</span>
         </div>
-        <span id="last-updated" class="text-xs text-secondary hidden sm:block"></span>
+        <span id="last-updated" class="text-xs text-header-muted hidden sm:block"></span>
         <button id="refresh-btn" onclick="loadPortfolio()"
           class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border
                  rounded-md transition-colors">
@@ -222,7 +259,7 @@
     <!-- ── STOCK POSITIONS ──────────────────────────────────── -->
     <section>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
           Stock Positions
           <span id="stocks-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
         </h2>
@@ -252,7 +289,7 @@
     <!-- ── OPTIONS POSITIONS ────────────────────────────────── -->
     <section>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
           Options Positions
           <span id="options-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
         </h2>
