@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+{% set active_page = 'trades-stats' %}
+{% block title %}Trade Stats — IBKR Portfolio{% endblock %}
+
+{% block content %}
+  <div id="empty-state" class="hidden bg-card border border-token rounded-lg px-6 py-10 text-center">
+    <p class="text-sm font-medium text-primary mb-1">No trade history yet</p>
+    <p class="text-xs text-secondary">Click <span class="font-semibold text-sapphire">Sync</span> in the header to pull the last 365 days of trades from IBKR.</p>
+  </div>
+
+  <div id="stats-content" class="hidden space-y-6">
+
+    <!-- Filters -->
+    <section class="bg-card rounded-lg border border-token p-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs text-secondary mb-1">Symbol</label>
+          <input id="f-symbol" list="symbol-list" class="filter-input w-28" type="text" placeholder="All" oninput="applyFilters()" />
+          <datalist id="symbol-list"></datalist>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Tag</label>
+          <select id="f-tag" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="auto">Auto-invest</option>
+            <option value="fractional">Fractional</option>
+            <option value="assignment">Assignment</option>
+            <option value="reinvest">Reinvest</option>
+            <option value="none">Untagged (manual)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">From month</label>
+          <select id="f-month-from" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">To month</label>
+          <select id="f-month-to" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Trade size</label>
+          <select id="f-size" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="0-500">&lt; $500</option>
+            <option value="500-2000">$500–2k</option>
+            <option value="2000-10000">$2k–10k</option>
+            <option value="10000+">$10k+</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Currency</label>
+          <select id="f-currency" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <button onclick="resetFilters()" class="btn-header" style="height: 34px;">Reset</button>
+        <span id="filter-count" class="text-xs text-secondary pb-2 ml-auto"></span>
+      </div>
+      <p class="text-xs text-secondary mt-2">P&amp;L metrics use FIFO-matched sells with known cost basis only; flagged sells are excluded from performance numbers.</p>
+    </section>
+
+    <!-- Headline -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Summary <span id="headline-scope" class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal"></span>
+      </h2>
+      <div id="headline-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+    </section>
+
+    <!-- Monthly flow chart -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Monthly Buy / Sell Flow &amp; Realized P&amp;L
+      </h2>
+      <div class="bg-card rounded-lg border border-token p-4">
+        <div class="relative h-64"><canvas id="flow-chart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Winner vs loser -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Winner vs Loser Profile
+        <span class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal">known-basis sells only</span>
+      </h2>
+      <div id="profile-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- Patterns -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Patterns
+        <span class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal">win rate &amp; P&amp;L by dimension</span>
+      </h2>
+      <div id="patterns-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- Best / worst -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Best Sells</h2>
+        <div id="best-list" class="space-y-2"></div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Worst Sells</h2>
+        <div id="worst-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let allSells = [];
+  let allBlotter = [];
+  let flowChart = null;
+
+  // ── Buckets ─────────────────────────────────────────────────
+  const SIZE_BUCKETS = ['0-500', '500-2000', '2000-10000', '10000+'];
+  const SIZE_LABELS = { '0-500': '< $500', '500-2000': '$500–2k', '2000-10000': '$2k–10k', '10000+': '$10k+' };
+  function sizeBucket(v) {
+    const a = Math.abs(v ?? 0);
+    if (a < 500) return '0-500';
+    if (a < 2000) return '500-2000';
+    if (a < 10000) return '2000-10000';
+    return '10000+';
+  }
+  const HELD_BUCKETS = ['0-7', '8-30', '31-90', '91+'];
+  function heldBucket(v) {
+    if (v == null) return null;
+    if (v <= 7) return '0-7';
+    if (v <= 30) return '8-30';
+    if (v <= 90) return '31-90';
+    return '91+';
+  }
+  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  function weekday(iso) {
+    if (!iso) return null;
+    return WEEKDAYS[(new Date(iso + 'T12:00:00').getDay() + 6) % 7];
+  }
+  const sellValue = s => s.qty * s.sellPrice;
+  const blotValue = b => Math.abs(b.value);
+
+  // ── Filters ─────────────────────────────────────────────────
+  function getFilters() {
+    return {
+      symbol:    document.getElementById('f-symbol').value.trim().toUpperCase(),
+      tag:       document.getElementById('f-tag').value,
+      monthFrom: document.getElementById('f-month-from').value,
+      monthTo:   document.getElementById('f-month-to').value,
+      size:      document.getElementById('f-size').value,
+      currency:  document.getElementById('f-currency').value || defaultCurrency(),
+    };
+  }
+
+  function defaultCurrency() {
+    const currencies = [...new Set(allBlotter.map(b => b.currency))];
+    return currencies.length === 1 ? currencies[0] : (document.getElementById('f-currency').value || 'USD');
+  }
+
+  function matches(row, f, value) {
+    const month = (row.dateRaw ?? '').slice(0, 7);
+    const tagOk = !f.tag
+      || (f.tag === 'none' ? row.tags.length === 0 : row.tags.includes(f.tag));
+    return (!f.symbol || row.symbol.toUpperCase().includes(f.symbol))
+      && tagOk
+      && (!f.monthFrom || month >= f.monthFrom)
+      && (!f.monthTo || month <= f.monthTo)
+      && (!f.size || sizeBucket(value) === f.size)
+      && row.currency === f.currency;
+  }
+
+  function resetFilters() {
+    document.getElementById('f-symbol').value = '';
+    ['f-tag', 'f-size', 'f-currency'].forEach(id => document.getElementById(id).selectedIndex = 0);
+    const months = monthOptions();
+    document.getElementById('f-month-from').value = months[0] ?? '';
+    document.getElementById('f-month-to').value = months[months.length - 1] ?? '';
+    applyFilters();
+  }
+
+  function monthOptions() {
+    return [...new Set(allBlotter.map(b => (b.dateRaw ?? '').slice(0, 7)).filter(Boolean))].sort();
+  }
+
+  function populateFilterOptions() {
+    const symbols = [...new Set(allBlotter.map(b => b.symbol))].sort();
+    document.getElementById('symbol-list').innerHTML = symbols.map(s => `<option value="${s}">`).join('');
+
+    const months = monthOptions();
+    const opts = months.map(m => `<option value="${m}">${m}</option>`).join('');
+    document.getElementById('f-month-from').innerHTML = opts;
+    document.getElementById('f-month-to').innerHTML = opts;
+    document.getElementById('f-month-from').value = months[0] ?? '';
+    document.getElementById('f-month-to').value = months[months.length - 1] ?? '';
+
+    const currencies = [...new Set(allBlotter.map(b => b.currency))].sort();
+    document.getElementById('f-currency').innerHTML =
+      currencies.map((c, i) => `<option value="${c}"${c === 'USD' ? ' selected' : ''}>${c}</option>`).join('');
+  }
+
+  // ── Aggregation ─────────────────────────────────────────────
+  const avg = vals => {
+    const v = vals.filter(x => x != null);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  };
+
+  function breakdown(sells, keyFn, order = null, labels = {}) {
+    const groups = {};
+    for (const s of sells) {
+      const k = keyFn(s);
+      if (k == null) continue;
+      (groups[k] ??= []).push(s);
+    }
+    let keys = Object.keys(groups);
+    keys = order
+      ? order.filter(k => k in groups)
+      : keys.sort((a, b) =>
+          groups[b].reduce((s, p) => s + p.realizedPnl, 0) - groups[a].reduce((s, p) => s + p.realizedPnl, 0));
+    return keys.map(k => {
+      const g = groups[k];
+      const wins = g.filter(s => s.realizedPnl > 0).length;
+      return {
+        label: labels[k] ?? k,
+        plays: g.length,
+        winRate: wins / g.length * 100,
+        avgPnl: g.reduce((s, p) => s + p.realizedPnl, 0) / g.length,
+        totalPnl: g.reduce((s, p) => s + p.realizedPnl, 0),
+      };
+    });
+  }
+
+  // ── Render pieces (shared look with options stats) ──────────
+  function statCard(label, mainHtml, subHtml = '') {
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3.5 shadow-sm">
+        <p class="text-xs text-secondary mb-1">${label}</p>
+        <p class="text-lg font-semibold leading-tight">${mainHtml}</p>
+        ${subHtml ? `<p class="text-xs text-secondary mt-0.5">${subHtml}</p>` : ''}
+      </div>`;
+  }
+
+  function renderHeadline(blotter, sells, known) {
+    const bought = blotter.filter(b => b.side === 'BUY').reduce((s, b) => s + Math.abs(b.value), 0);
+    const soldV = blotter.filter(b => b.side === 'SELL').reduce((s, b) => s + Math.abs(b.value), 0);
+    const commissions = blotter.reduce((s, b) => s + b.commission, 0);
+    const realized = known.reduce((s, x) => s + x.realizedPnl, 0);
+    const wins = known.filter(s => s.realizedPnl > 0).length;
+    const flagged = sells.length - known.length;
+
+    document.getElementById('headline-grid').innerHTML = [
+      statCard('Bought', `<span class="text-primary">${fmt.usd(bought)}</span>`,
+        `${blotter.filter(b => b.side === 'BUY').length} buy fills`),
+      statCard('Sold', `<span class="text-primary">${fmt.usd(soldV)}</span>`,
+        `${blotter.filter(b => b.side === 'SELL').length} sell fills`),
+      statCard('Net Invested', `<span class="text-primary">${fmt.pnl(bought - soldV)}</span>`, 'buys minus sells'),
+      statCard('Realized P&L', `<span class="${pnlColor(realized)}">${fmt.pnl(realized)}</span>`,
+        flagged ? `known basis only · ${flagged} sells excluded` : 'known basis, incl. commissions'),
+      statCard('Win Rate',
+        known.length ? `<span class="${wins / known.length >= 0.5 ? 'text-gain' : 'text-loss'}">${(wins / known.length * 100).toFixed(0)}%</span>` : '—',
+        `${known.length} matched sells`),
+      statCard('Avg P&L / Sell', known.length ? `<span class="${pnlColor(avg(known.map(s => s.realizedPnl)))}">${fmt.pnl(avg(known.map(s => s.realizedPnl)))}</span>` : '—'),
+      statCard('Avg Days Held', avg(known.map(s => s.daysHeld)) != null ? `<span class="text-primary">${avg(known.map(s => s.daysHeld)).toFixed(1)}d</span>` : '—', 'FIFO-weighted'),
+      statCard('Commissions', `<span class="text-coral">${fmt.usd(commissions)}</span>`, 'all executions'),
+    ].join('');
+  }
+
+  function profileCard(title, sells, colorCls) {
+    if (!sells.length) {
+      return `<div class="bg-card rounded-lg border border-token px-4 py-3.5">
+        <p class="text-sm font-semibold ${colorCls} mb-1">${title}</p>
+        <p class="text-xs text-secondary">No sells in this slice</p></div>`;
+    }
+    const counts = {};
+    sells.forEach(s => counts[s.symbol] = (counts[s.symbol] ?? 0) + 1);
+    const top = Object.entries(counts).sort((x, y) => y[1] - x[1])[0];
+    const autoShare = sells.filter(s => s.tags.includes('auto')).length / sells.length * 100;
+    const row = (k, v) => `<div class="flex justify-between gap-2"><span class="text-secondary">${k}</span><span class="text-primary font-medium">${v}</span></div>`;
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3.5">
+        <p class="text-sm font-semibold ${colorCls} mb-2">${title} <span class="text-xs font-normal text-secondary">(${sells.length} sells)</span></p>
+        <div class="space-y-1.5 text-xs">
+          ${row('Avg P&L', `<span class="${pnlColor(avg(sells.map(s => s.realizedPnl)))}">${fmt.pnl(avg(sells.map(s => s.realizedPnl)))}</span>`)}
+          ${row('Avg P&L %', fmt.pct(avg(sells.map(s => s.pnlPct))))}
+          ${row('Avg sell value', fmt.usd(avg(sells.map(sellValue))))}
+          ${row('Avg days held', avg(sells.map(s => s.daysHeld)) != null ? avg(sells.map(s => s.daysHeld)).toFixed(1) + 'd' : '—')}
+          ${row('Auto-invest share', autoShare.toFixed(0) + '%')}
+          ${row('Most sold', top ? `${top[0]} (${top[1]}x)` : '—')}
+        </div>
+      </div>`;
+  }
+
+  function winRateCell(wr) {
+    const cls = wr >= 70 ? 'text-gain' : wr >= 50 ? 'text-coral' : 'text-loss';
+    return `
+      <div class="flex items-center gap-2 justify-end">
+        <div class="bar-track rounded-full h-1 w-14 shrink-0">
+          <div class="h-1 rounded-full" style="width:${wr.toFixed(0)}%;background:${themeColor(wr >= 70 ? '--color-gain' : wr >= 50 ? '--color-coral' : '--color-loss')}"></div>
+        </div>
+        <span class="${cls} font-medium">${wr.toFixed(0)}%</span>
+      </div>`;
+  }
+
+  function patternCard(title, rows, note = '') {
+    if (!rows.length) return '';
+    const body = rows.map(r => `
+      <tr>
+        <td class="px-3 py-2 text-primary font-medium whitespace-nowrap">${r.label}</td>
+        <td class="px-3 py-2 num text-secondary">${r.plays}</td>
+        <td class="px-3 py-2 num">${winRateCell(r.winRate)}</td>
+        <td class="px-3 py-2 num ${pnlColor(r.avgPnl)}">${fmt.pnl(r.avgPnl)}</td>
+        <td class="px-3 py-2 num ${pnlColor(r.totalPnl)} font-medium">${fmt.pnl(r.totalPnl)}</td>
+      </tr>`).join('');
+    return `
+      <div class="bg-card rounded-lg border border-token overflow-hidden">
+        <div class="px-4 pt-3 pb-2">
+          <p class="text-sm font-semibold text-primary">${title}</p>
+          ${note ? `<p class="text-xs text-secondary">${note}</p>` : ''}
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table w-full text-xs border-collapse">
+            <thead>
+              <tr class="bg-surface border-b border-token text-secondary">
+                <th class="px-3 py-1.5 text-left font-medium">Bucket</th>
+                <th class="px-3 py-1.5 num font-medium">Sells</th>
+                <th class="px-3 py-1.5 num font-medium">Win rate</th>
+                <th class="px-3 py-1.5 num font-medium">Avg P&L</th>
+                <th class="px-3 py-1.5 num font-medium">Total P&L</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderPatterns(known) {
+    document.getElementById('patterns-grid').innerHTML = [
+      patternCard('By Symbol', breakdown(known, s => s.symbol).slice(0, 12), 'top 12 by total P&L'),
+      patternCard('By Hold Time',
+        breakdown(known, s => heldBucket(s.daysHeld), HELD_BUCKETS,
+          { '0-7': '0–7d', '8-30': '8–30d', '31-90': '31–90d', '91+': '91d+' }),
+        'quick flips vs long holds'),
+      patternCard('By Trade Size',
+        breakdown(known, s => sizeBucket(sellValue(s)), SIZE_BUCKETS, SIZE_LABELS),
+        'sell value at exit'),
+      patternCard('By Month Sold', breakdown(known, s => (s.dateRaw ?? '').slice(0, 7) || null, monthOptions())),
+      patternCard('By Weekday Sold', breakdown(known, s => weekday(s.dateRaw), WEEKDAYS)),
+      patternCard('By Tag',
+        breakdown(known, s => s.tags.length ? s.tags[0] : 'manual'),
+        'auto-invest vs manual exits'),
+    ].join('');
+  }
+
+  function renderFlowChart(blotter, known) {
+    chartDefaults();
+    const months = monthOptions();
+    const byMonth = m => blotter.filter(b => (b.dateRaw ?? '').startsWith(m));
+    const buys = months.map(m => byMonth(m).filter(b => b.side === 'BUY').reduce((s, b) => s + Math.abs(b.value), 0));
+    const sellsV = months.map(m => byMonth(m).filter(b => b.side === 'SELL').reduce((s, b) => s + Math.abs(b.value), 0));
+    let cum = 0;
+    const cumPnl = months.map(m =>
+      +(cum += known.filter(s => (s.dateRaw ?? '').startsWith(m)).reduce((s, x) => s + x.realizedPnl, 0)).toFixed(2));
+
+    if (flowChart) flowChart.destroy();
+    flowChart = new Chart(document.getElementById('flow-chart'), {
+      data: {
+        labels: months,
+        datasets: [
+          { type: 'bar', label: 'Bought', data: buys, backgroundColor: themeColor('--color-sapphire'), borderRadius: 4, order: 3 },
+          { type: 'bar', label: 'Sold', data: sellsV, backgroundColor: themeColor('--color-coral'), borderRadius: 4, order: 2 },
+          { type: 'line', label: 'Cumulative realized P&L', data: cumPnl,
+            borderColor: themeColor('--color-gain'), backgroundColor: themeColor('--color-gain'),
+            tension: 0.3, pointRadius: 3, order: 1 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { boxWidth: 12, boxHeight: 12 } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt.pnl(ctx.parsed.y)}` } },
+        },
+        scales: { y: { ticks: { callback: v => '$' + v.toLocaleString('en-US') } } },
+      },
+    });
+  }
+
+  function sellRow(s) {
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-primary truncate">${s.symbol} · ${s.qty} sh @ ${fmt.usd(s.sellPrice)}</p>
+          <p class="text-xs text-secondary">${s.date ?? '—'} · held ${s.daysHeld != null ? s.daysHeld + 'd' : '—'}${s.tags.length ? ' · ' + s.tags.join(', ') : ''}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-sm font-semibold ${pnlColor(s.realizedPnl)}">${fmt.pnl(s.realizedPnl)}</p>
+          <p class="text-xs ${pnlColor(s.pnlPct)}">${fmt.pct(s.pnlPct)}</p>
+        </div>
+      </div>`;
+  }
+
+  // ── Main ────────────────────────────────────────────────────
+  function applyFilters() {
+    const f = getFilters();
+    const blotter = allBlotter.filter(b => matches(b, f, blotValue(b)));
+    const sells = allSells.filter(s => matches(s, f, sellValue(s)));
+    const known = sells.filter(s => s.coverage === 'full' && s.realizedPnl != null);
+
+    document.getElementById('filter-count').textContent =
+      `${blotter.length} executions · ${sells.length} sells · ${known.length} with known basis`;
+    document.getElementById('headline-scope').textContent =
+      blotter.length === allBlotter.length ? '(all trades)' : '(filtered)';
+
+    renderHeadline(blotter, sells, known);
+    renderFlowChart(blotter, known);
+    document.getElementById('profile-grid').innerHTML =
+      profileCard('Winners', known.filter(s => s.realizedPnl > 0), 'text-gain') +
+      profileCard('Losers', known.filter(s => s.realizedPnl <= 0), 'text-loss');
+    renderPatterns(known);
+
+    const ranked = [...known].sort((a, b) => a.realizedPnl - b.realizedPnl);
+    document.getElementById('best-list').innerHTML =
+      ranked.slice(-5).reverse().map(sellRow).join('') || '<p class="text-sm text-secondary">—</p>';
+    document.getElementById('worst-list').innerHTML =
+      ranked.slice(0, 5).map(sellRow).join('') || '<p class="text-sm text-secondary">—</p>';
+  }
+
+  function onThemeChange() { if (allBlotter.length) applyFilters(); }
+
+  async function loadPage() {
+    clearError();
+    try {
+      const resp = await fetch('/api/trades');
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load trades');
+
+      allSells = data.sells;
+      allBlotter = data.blotter;
+      setLastSync(data.lastSync);
+
+      const hasData = allBlotter.length > 0;
+      document.getElementById('empty-state').classList.toggle('hidden', hasData);
+      document.getElementById('stats-content').classList.toggle('hidden', !hasData);
+      if (!hasData) return;
+
+      populateFilterOptions();
+      applyFilters();
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  loadPage();
+</script>
+{% endblock %}

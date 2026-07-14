@@ -40,3 +40,9 @@ Thumbs.db
 # IBKR / credentials
 *.json
 !package.json
+
+# Local trade cache
+*.db
+
+# Manually exported Flex statements (contain account data)
+Manual/

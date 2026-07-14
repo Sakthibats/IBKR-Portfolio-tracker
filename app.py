@@ -7,9 +7,13 @@ Run:  flask run   (or python app.py)
 import time
 import urllib3
 from datetime import date, datetime, timezone
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
 import requests
 
+import flex
+
+load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
@@ -323,6 +327,68 @@ def api_status():
         "authenticated": data.get("authenticated", False),
         "connected":     data.get("connected", False),
     })
+
+
+@app.route("/history")
+def history_page():
+    return render_template("history.html")
+
+
+@app.route("/stats")
+def stats_page():
+    return render_template("stats.html")
+
+
+@app.route("/trades")
+def trades_page():
+    return render_template("trades.html")
+
+
+@app.route("/trades-stats")
+def trades_stats_page():
+    return render_template("trades_stats.html")
+
+
+@app.route("/api/trades")
+def api_trades():
+    """Return the stock blotter and FIFO-realized sells."""
+    data = flex.build_stock_trades(flex.load_executions())
+    data["lastSync"] = flex.last_sync()
+    return jsonify(data)
+
+
+@app.route("/api/sync", methods=["POST"])
+def api_sync():
+    """Fetch the latest Flex statement and update the local trade cache."""
+    try:
+        result = flex.sync_trades()
+        return jsonify(result)
+    except flex.FlexError as e:
+        return jsonify({"error": "flex_error", "message": str(e)}), 502
+    except requests.RequestException as e:
+        return jsonify({"error": "network_error", "message": str(e)}), 502
+
+
+@app.route("/api/history")
+def api_history():
+    """Return option plays (round trips) built from cached executions."""
+    executions = flex.load_executions()
+    plays = flex.build_plays(executions)
+    return jsonify({
+        "plays":      plays,
+        "executions": len(executions),
+        "lastSync":   flex.last_sync(),
+    })
+
+
+@app.route("/api/stats")
+def api_stats():
+    """Return summary statistics over all cached option plays."""
+    executions = flex.load_executions()
+    plays = flex.build_plays(executions)
+    stats = flex.compute_stats(plays)
+    stats["lastSync"] = flex.last_sync()
+    return jsonify(stats)
 
 
 @app.route("/api/portfolio")
