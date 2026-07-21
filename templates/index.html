@@ -320,7 +320,7 @@
         </h2>
       </div>
       <!-- Options summary stats -->
-      <div id="options-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4"></div>
+      <div id="options-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-4"></div>
 
       <div class="table-wrap">
         <table id="options-table" class="data-table w-full text-sm border-collapse">
@@ -333,6 +333,7 @@
               <th class="px-4 py-2.5 num         sortable" data-col="dte"                           onclick="handleSort('options','dte')">              DTE         <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden md:table-cell" data-col="qty"      onclick="handleSort('options','qty')">              Qty         <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="premium"  onclick="handleSort('options','premium')">          Premium     <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="currentPrice" onclick="handleSort('options','currentPrice')"> Current     <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="underlyingPrice" onclick="handleSort('options','underlyingPrice')"> Underlying  <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="otmPct"                        onclick="handleSort('options','otmPct')">           % OTM       <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="delta"                         onclick="handleSort('options','delta')">            Delta       <span class="sort-icon">↕</span></th>
@@ -431,7 +432,7 @@
       },
       options: {
         ticker: 'str', type: 'str', strike: 'num', dte: 'num',
-        qty: 'num', premium: 'num', underlyingPrice: 'num',
+        qty: 'num', premium: 'num', currentPrice: 'num', underlyingPrice: 'num',
         otmPct: 'num', delta: 'num', unrealizedPnl: 'num', pnlPctCaptured: 'num',
         exposure: 'num',
       },
@@ -552,7 +553,7 @@
       document.getElementById('options-count').textContent = `(${options.length})`;
       const tbody = document.getElementById('options-body');
       if (!options.length) {
-        tbody.innerHTML = `<tr><td colspan="13" class="px-4 py-6 text-center text-sm text-secondary">No options positions</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" class="px-4 py-6 text-center text-sm text-secondary">No options positions</td></tr>`;
         return;
       }
       tbody.innerHTML = options.map(o => {
@@ -579,6 +580,7 @@
             <td class="px-4 py-3 num">${dteDisplay(o.dte)}</td>
             <td class="px-4 py-3 num text-secondary hidden md:table-cell">${o.qty}</td>
             <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${fmt.usd(o.premium)}</td>
+            <td class="px-4 py-3 num hidden lg:table-cell ${o.currentPrice != null && o.premium != null ? ((o.qty < 0 ? o.currentPrice <= o.premium : o.currentPrice >= o.premium) ? 'text-gain' : 'text-loss') : 'text-secondary'}">${o.currentPrice != null ? fmt.usd(o.currentPrice) : '—'}</td>
             <td class="px-4 py-3 num text-primary hidden lg:table-cell">${o.underlyingPrice != null ? fmt.usd(o.underlyingPrice) : '<span class="text-secondary">—</span>'}</td>
             <td class="px-4 py-3 num whitespace-nowrap">${otmDisplay(o.otmPct)}</td>
             <td class="px-4 py-3 num">${deltaDisplay(o.delta)}</td>
@@ -594,10 +596,10 @@
     /** Compact stat card used in both summary strips */
     function statCard(label, mainHtml, subHtml = '') {
       return `
-        <div class="bg-card rounded-lg border border-token px-3.5 py-3">
-          <p class="text-xs text-secondary mb-1">${label}</p>
-          <p class="text-sm font-semibold leading-tight">${mainHtml}</p>
-          ${subHtml ? `<p class="text-xs text-secondary mt-0.5">${subHtml}</p>` : ''}
+        <div class="bg-card rounded-lg border border-token px-3.5 py-3 min-w-0">
+          <p class="text-xs text-secondary mb-1 truncate" title="${label.replace(/<[^>]*>/g, '')}">${label}</p>
+          <p class="text-sm font-semibold leading-tight whitespace-nowrap">${mainHtml}</p>
+          ${subHtml ? `<p class="text-xs text-secondary mt-0.5 leading-snug">${subHtml}</p>` : ''}
         </div>`;
     }
 
@@ -642,13 +644,16 @@
       const expiringCount   = expiring.length;
       const expiringPremium = expiring.reduce((s, o) => s + (o.maxProfit ?? 0), 0);
 
-      const otmValues = options.filter(o => o.otmPct != null && o.dte != null && o.dte > 0).map(o => o.otmPct);
-      const avgOtm = otmValues.length ? otmValues.reduce((s, v) => s + v, 0) / otmValues.length : null;
-
       // Put assignment exposure: sold puts only — cash needed if assigned (contracts × 100 × strike)
       const putExposure = options
         .filter(o => o.type === 'P' && o.qty < 0)
         .reduce((s, o) => s + Math.abs(o.qty) * 100 * o.strike, 0);
+
+      // ITM assignment exposure: sold options currently ITM and not expired —
+      // cash needed for put assignment plus cover cost for calls
+      const itmOptions = options.filter(o =>
+        o.qty < 0 && o.otmPct != null && o.otmPct < 0 && (o.dte == null || o.dte > 0));
+      const itmExposure = itmOptions.reduce((s, o) => s + (calcExposure(o) ?? 0), 0);
 
       // Call cover exposure: sold calls only — cost to acquire shares (contracts × 100 × underlying)
       const callExposure = options
@@ -668,7 +673,7 @@
         </div>`;
 
       document.getElementById('options-stats').innerHTML = [
-        statCard('Max Premium at Expiry',
+        statCard('Max Premium',
           `<span class="text-primary">${fmt.usd(maxPremium)}</span>`,
           'if all expire worthless'),
         `<div class="bg-card rounded-lg border border-token px-3.5 py-3">
@@ -692,11 +697,11 @@
            </p>
            ${expiringCount > 0 ? `<p class="text-xs text-gain mt-0.5 font-medium">${fmt.usd(expiringPremium)} if all expire</p>` : ''}
          </div>`,
-        statCard('Avg % OTM',
-          avgOtm != null
-            ? `<span class="${avgOtm < 0 ? 'text-loss' : avgOtm < 8 ? 'text-loss' : avgOtm < 15 ? 'text-coral' : 'text-gain'}">${avgOtm >= 0 ? '+' : ''}${avgOtm.toFixed(1)}%</span>`
-            : '<span class="text-secondary">—</span>',
-          'across active positions'),
+        statCard('ITM Assignment',
+          `<span class="${itmOptions.length ? 'text-loss' : 'text-primary'}">${fmt.usd(itmExposure)}</span>`,
+          itmOptions.length
+            ? `${itmOptions.length} ITM position${itmOptions.length === 1 ? '' : 's'}`
+            : 'no positions ITM'),
         statCard('Put Assignment',
           `<span class="text-primary">${fmt.usd(putExposure)}</span>`,
           'if all sold puts assigned'),

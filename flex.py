@@ -27,6 +27,7 @@ FLEX_VERSION = "3"
 HEADERS = {"User-Agent": "Mozilla/5.0 (IBKR-Portfolio-Tracker)"}
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flex_trades.db")
+MANUAL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Manual")
 
 
 class FlexError(Exception):
@@ -43,6 +44,16 @@ def _flex_config() -> tuple[str, str]:
     if not token:
         raise FlexError("IBKR_FLEX_TOKEN is not set. Add it to your .env file.")
     return token, query_id
+
+
+def _save_statement_xml(xml_text: str) -> str:
+    """Save a fetched Flex statement XML into the Manual folder; returns the path."""
+    os.makedirs(MANUAL_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(MANUAL_DIR, f"flex_statement_{stamp}.xml")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(xml_text)
+    return path
 
 
 def fetch_flex_statement() -> str:
@@ -76,6 +87,7 @@ def fetch_flex_statement() -> str:
         resp.raise_for_status()
         text = resp.text
         if "<FlexQueryResponse" in text:
+            _save_statement_xml(text)
             return text
         try:
             err_root = ET.fromstring(text)
