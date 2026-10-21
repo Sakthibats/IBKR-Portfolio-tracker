@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+{% set active_page = 'stats' %}
+{% block title %}Options Stats — IBKR Portfolio{% endblock %}
+
+{% block content %}
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden bg-card border border-token rounded-lg px-6 py-10 text-center">
+    <p class="text-sm font-medium text-primary mb-1">No trade history yet</p>
+    <p class="text-xs text-secondary">Click <span class="font-semibold text-sapphire">Sync</span> in the header to pull the last 365 days of option trades from IBKR.</p>
+  </div>
+
+  <div id="stats-content" class="hidden space-y-6">
+
+    <!-- ── FILTERS ─────────────────────────────────────────── -->
+    <section class="bg-card rounded-lg border border-token p-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs text-secondary mb-1">Ticker</label>
+          <input id="f-ticker" list="ticker-list" class="filter-input w-28" type="text" placeholder="All" oninput="applyFilters()" />
+          <datalist id="ticker-list"></datalist>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Type</label>
+          <select id="f-type" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="P">Puts</option>
+            <option value="C">Calls</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Direction</label>
+          <select id="f-direction" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="sold">Sold (STO)</option>
+            <option value="bought">Bought (BTO)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Outcome</label>
+          <select id="f-outcome" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="closed">Closed early</option>
+            <option value="expired">Expired</option>
+            <option value="assigned">Assigned</option>
+            <option value="exercised">Exercised</option>
+            <option value="open">Open</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">From month</label>
+          <select id="f-month-from" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">To month</label>
+          <select id="f-month-to" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">DTE at open</label>
+          <select id="f-dte" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="0-7">0–7d</option>
+            <option value="8-14">8–14d</option>
+            <option value="15-30">15–30d</option>
+            <option value="31+">31d+</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Premium size</label>
+          <select id="f-premium" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="0-250">&lt; $250</option>
+            <option value="250-1000">$250–1k</option>
+            <option value="1000-2500">$1k–2.5k</option>
+            <option value="2500+">$2.5k+</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Rolls</label>
+          <select id="f-rolled" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="yes">Rolled only</option>
+            <option value="no">Exclude rolls</option>
+          </select>
+        </div>
+        <button onclick="resetFilters()" class="btn-header" style="height: 34px;">Reset</button>
+        <span id="filter-count" class="text-xs text-secondary pb-2 ml-auto"></span>
+      </div>
+    </section>
+
+    <!-- ── HEADLINE ────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Summary <span id="headline-scope" class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal"></span>
+      </h2>
+      <div id="headline-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+    </section>
+
+    <!-- ── WINNERS vs LOSERS PROFILE ───────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Winner vs Loser Profile
+        <span class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal">what your typical winning and losing play looks like</span>
+      </h2>
+      <div id="profile-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- ── PATTERN BREAKDOWNS ──────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+        Patterns
+        <span class="ml-1.5 text-xs font-normal text-secondary normal-case tracking-normal">win rate &amp; P&amp;L by dimension — closed plays only</span>
+      </h2>
+      <div id="patterns-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- ── OUTCOMES + PUT/CALL ─────────────────────────────── -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Outcomes</h2>
+        <div class="bg-card rounded-lg border border-token p-4">
+          <div class="relative h-56"><canvas id="outcome-chart"></canvas></div>
+        </div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Puts vs Calls</h2>
+        <div id="putcall-grid" class="grid grid-cols-2 gap-3"></div>
+      </div>
+    </section>
+
+    <!-- ── BEST / WORST ────────────────────────────────────── -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Best Trades</h2>
+        <div id="best-list" class="space-y-2"></div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">Worst Trades</h2>
+        <div id="worst-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let allPlays = [];
+  let outcomeChart = null;
+
+  // ── Bucketing helpers ───────────────────────────────────────
+  const DTE_BUCKETS = ['0-7', '8-14', '15-30', '31+'];
+  function dteBucket(v) {
+    if (v == null) return null;
+    if (v <= 7) return '0-7';
+    if (v <= 14) return '8-14';
+    if (v <= 30) return '15-30';
+    return '31+';
+  }
+  const HELD_BUCKETS = ['0-3', '4-7', '8-14', '15+'];
+  function heldBucket(v) {
+    if (v == null) return null;
+    if (v <= 3) return '0-3';
+    if (v <= 7) return '4-7';
+    if (v <= 14) return '8-14';
+    return '15+';
+  }
+  const PREMIUM_BUCKETS = ['0-250', '250-1000', '1000-2500', '2500+'];
+  function premiumBucket(v) {
+    if (v == null) return null;
+    if (v < 250) return '0-250';
+    if (v < 1000) return '250-1000';
+    if (v < 2500) return '1000-2500';
+    return '2500+';
+  }
+  const PREMIUM_LABELS = { '0-250': '< $250', '250-1000': '$250–1k', '1000-2500': '$1k–2.5k', '2500+': '$2.5k+' };
+  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  function weekday(iso) {
+    if (!iso) return null;
+    const d = new Date(iso + 'T12:00:00');
+    return WEEKDAYS[(d.getDay() + 6) % 7];
+  }
+
+  // ── Filtering ───────────────────────────────────────────────
+  function getFilters() {
+    return {
+      ticker:    document.getElementById('f-ticker').value.trim().toUpperCase(),
+      type:      document.getElementById('f-type').value,
+      direction: document.getElementById('f-direction').value,
+      outcome:   document.getElementById('f-outcome').value,
+      monthFrom: document.getElementById('f-month-from').value,
+      monthTo:   document.getElementById('f-month-to').value,
+      dte:       document.getElementById('f-dte').value,
+      premium:   document.getElementById('f-premium').value,
+      rolled:    document.getElementById('f-rolled').value,
+    };
+  }
+
+  function filteredPlays() {
+    const f = getFilters();
+    const tickers = f.ticker ? f.ticker.split(',').map(t => t.trim()).filter(Boolean) : [];
+    return allPlays.filter(p => {
+      const month = (p.openDateRaw ?? '').slice(0, 7);
+      return (!tickers.length || tickers.some(t => p.underlying.toUpperCase().includes(t)))
+        && (!f.type || p.type === f.type)
+        && (!f.direction || p.direction === f.direction)
+        && (!f.outcome || p.outcome === f.outcome)
+        && (!f.monthFrom || month >= f.monthFrom)
+        && (!f.monthTo || month <= f.monthTo)
+        && (!f.dte || dteBucket(p.dteAtOpen) === f.dte)
+        && (!f.premium || premiumBucket(p.premiumTotal) === f.premium)
+        && (!f.rolled || (f.rolled === 'yes') === !!p.rolled);
+    });
+  }
+
+  function resetFilters() {
+    ['f-ticker'].forEach(id => document.getElementById(id).value = '');
+    ['f-type', 'f-direction', 'f-outcome', 'f-dte', 'f-premium', 'f-rolled'].forEach(id =>
+      document.getElementById(id).selectedIndex = 0);
+    const months = monthOptions();
+    document.getElementById('f-month-from').value = months[0] ?? '';
+    document.getElementById('f-month-to').value = months[months.length - 1] ?? '';
+    applyFilters();
+  }
+
+  function monthOptions() {
+    return [...new Set(allPlays.map(p => (p.openDateRaw ?? '').slice(0, 7)).filter(Boolean))].sort();
+  }
+
+  function populateFilterOptions() {
+    const tickers = [...new Set(allPlays.map(p => p.underlying))].sort();
+    document.getElementById('ticker-list').innerHTML =
+      tickers.map(t => `<option value="${t}">`).join('');
+
+    const months = monthOptions();
+    const opts = months.map(m => `<option value="${m}">${m}</option>`).join('');
+    const from = document.getElementById('f-month-from');
+    const to = document.getElementById('f-month-to');
+    from.innerHTML = opts;
+    to.innerHTML = opts;
+    from.value = months[0] ?? '';
+    to.value = months[months.length - 1] ?? '';
+  }
+
+  // ── Aggregation ─────────────────────────────────────────────
+  const avg = vals => {
+    const v = vals.filter(x => x != null);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  };
+
+  function aggregate(plays) {
+    const closed = plays.filter(p => p.realizedPnl != null);
+    const wins = closed.filter(p => p.realizedPnl > 0);
+    const sold = plays.filter(p => p.direction === 'sold');
+    return {
+      plays: plays.length,
+      closed: closed.length,
+      open: plays.length - closed.length,
+      premium: sold.reduce((s, p) => s + p.premiumTotal, 0),
+      realized: closed.reduce((s, p) => s + p.realizedPnl, 0),
+      winRate: closed.length ? wins.length / closed.length * 100 : null,
+      avgPnl: avg(closed.map(p => p.realizedPnl)),
+      avgPremium: avg(sold.map(p => p.premiumTotal)),
+      avgDaysHeld: avg(closed.map(p => p.daysHeld)),
+      avgDteAtOpen: avg(plays.map(p => p.dteAtOpen)),
+    };
+  }
+
+  /** Group closed plays by keyFn and aggregate each bucket. */
+  function breakdown(closed, keyFn, order = null, labels = {}) {
+    const groups = {};
+    for (const p of closed) {
+      const k = keyFn(p);
+      if (k == null) continue;
+      (groups[k] ??= []).push(p);
+    }
+    let keys = Object.keys(groups);
+    keys = order
+      ? order.filter(k => k in groups)
+      : keys.sort((a, b) => {
+          const pa = groups[a].reduce((s, p) => s + p.realizedPnl, 0);
+          const pb = groups[b].reduce((s, p) => s + p.realizedPnl, 0);
+          return pb - pa;
+        });
+    return keys.map(k => {
+      const g = groups[k];
+      const wins = g.filter(p => p.realizedPnl > 0).length;
+      return {
+        label: labels[k] ?? k,
+        plays: g.length,
+        winRate: wins / g.length * 100,
+        avgPnl: g.reduce((s, p) => s + p.realizedPnl, 0) / g.length,
+        totalPnl: g.reduce((s, p) => s + p.realizedPnl, 0),
+      };
+    });
+  }
+
+  // ── Render: headline ────────────────────────────────────────
+  function statCard(label, mainHtml, subHtml = '') {
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3.5 shadow-sm">
+        <p class="text-xs text-secondary mb-1">${label}</p>
+        <p class="text-lg font-semibold leading-tight">${mainHtml}</p>
+        ${subHtml ? `<p class="text-xs text-secondary mt-0.5">${subHtml}</p>` : ''}
+      </div>`;
+  }
+
+  function renderHeadline(a) {
+    document.getElementById('headline-grid').innerHTML = [
+      statCard('Premium Collected', `<span class="text-primary">${fmt.usd(a.premium)}</span>`, 'gross, sold options'),
+      statCard('Realized P&L', `<span class="${pnlColor(a.realized)}">${fmt.pnl(a.realized)}</span>`, 'closed plays, incl. commissions'),
+      statCard('Win Rate',
+        a.winRate != null ? `<span class="${a.winRate >= 50 ? 'text-gain' : 'text-loss'}">${a.winRate.toFixed(0)}%</span>` : '—',
+        `${a.closed} closed plays`),
+      statCard('Plays', `<span class="text-primary">${a.plays}</span>`, `${a.open} open / not closed`),
+      statCard('Avg Premium / Play', `<span class="text-primary">${fmt.usd(a.avgPremium)}</span>`, 'sold options'),
+      statCard('Avg P&L / Play', a.avgPnl != null ? `<span class="${pnlColor(a.avgPnl)}">${fmt.pnl(a.avgPnl)}</span>` : '—', 'closed plays'),
+      statCard('Avg Days Held', a.avgDaysHeld != null ? `<span class="text-primary">${a.avgDaysHeld.toFixed(1)}d</span>` : '—'),
+      statCard('Avg DTE at Open', a.avgDteAtOpen != null ? `<span class="text-primary">${a.avgDteAtOpen.toFixed(1)}d</span>` : '—'),
+    ].join('');
+  }
+
+  // ── Render: winner vs loser profile ─────────────────────────
+  function profileCard(title, plays, colorCls) {
+    if (!plays.length) {
+      return `<div class="bg-card rounded-lg border border-token px-4 py-3.5">
+        <p class="text-sm font-semibold ${colorCls} mb-1">${title}</p>
+        <p class="text-xs text-secondary">No plays in this slice</p></div>`;
+    }
+    const a = aggregate(plays);
+    const putShare = plays.filter(p => p.type === 'P').length / plays.length * 100;
+    const soldShare = plays.filter(p => p.direction === 'sold').length / plays.length * 100;
+    const counts = {};
+    plays.forEach(p => counts[p.underlying] = (counts[p.underlying] ?? 0) + 1);
+    const topTicker = Object.entries(counts).sort((x, y) => y[1] - x[1])[0];
+    const rollShare = plays.filter(p => p.rolled).length / plays.length * 100;
+    const row = (k, v) => `<div class="flex justify-between gap-2"><span class="text-secondary">${k}</span><span class="text-primary font-medium">${v}</span></div>`;
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3.5">
+        <p class="text-sm font-semibold ${colorCls} mb-2">${title} <span class="text-xs font-normal text-secondary">(${plays.length} plays)</span></p>
+        <div class="space-y-1.5 text-xs">
+          ${row('Avg P&L', `<span class="${pnlColor(a.avgPnl)}">${fmt.pnl(a.avgPnl)}</span>`)}
+          ${row('Avg premium', fmt.usd(a.avgPremium))}
+          ${row('Avg DTE at open', a.avgDteAtOpen != null ? a.avgDteAtOpen.toFixed(1) + 'd' : '—')}
+          ${row('Avg days held', a.avgDaysHeld != null ? a.avgDaysHeld.toFixed(1) + 'd' : '—')}
+          ${row('Puts / Calls', putShare.toFixed(0) + '% / ' + (100 - putShare).toFixed(0) + '%')}
+          ${row('Sold / Bought', soldShare.toFixed(0) + '% / ' + (100 - soldShare).toFixed(0) + '%')}
+          ${row('Part of a roll', rollShare.toFixed(0) + '%')}
+          ${row('Most traded', topTicker ? `${topTicker[0]} (${topTicker[1]}x)` : '—')}
+        </div>
+      </div>`;
+  }
+
+  function renderProfiles(closed) {
+    const winners = closed.filter(p => p.realizedPnl > 0);
+    const losers = closed.filter(p => p.realizedPnl <= 0);
+    document.getElementById('profile-grid').innerHTML =
+      profileCard('Winners', winners, 'text-gain') + profileCard('Losers', losers, 'text-loss');
+  }
+
+  // ── Render: pattern breakdown cards ─────────────────────────
+  function winRateCell(wr) {
+    const cls = wr >= 70 ? 'text-gain' : wr >= 50 ? 'text-coral' : 'text-loss';
+    return `
+      <div class="flex items-center gap-2 justify-end">
+        <div class="bar-track rounded-full h-1 w-14 shrink-0">
+          <div class="h-1 rounded-full" style="width:${wr.toFixed(0)}%;background:${themeColor(wr >= 70 ? '--color-gain' : wr >= 50 ? '--color-coral' : '--color-loss')}"></div>
+        </div>
+        <span class="${cls} font-medium">${wr.toFixed(0)}%</span>
+      </div>`;
+  }
+
+  function patternCard(title, rows, note = '') {
+    if (!rows.length) return '';
+    const body = rows.map(r => `
+      <tr>
+        <td class="px-3 py-2 text-primary font-medium whitespace-nowrap">${r.label}</td>
+        <td class="px-3 py-2 num text-secondary">${r.plays}</td>
+        <td class="px-3 py-2 num">${winRateCell(r.winRate)}</td>
+        <td class="px-3 py-2 num ${pnlColor(r.avgPnl)}">${fmt.pnl(r.avgPnl)}</td>
+        <td class="px-3 py-2 num ${pnlColor(r.totalPnl)} font-medium">${fmt.pnl(r.totalPnl)}</td>
+      </tr>`).join('');
+    return `
+      <div class="bg-card rounded-lg border border-token overflow-hidden">
+        <div class="px-4 pt-3 pb-2">
+          <p class="text-sm font-semibold text-primary">${title}</p>
+          ${note ? `<p class="text-xs text-secondary">${note}</p>` : ''}
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table w-full text-xs border-collapse">
+            <thead>
+              <tr class="bg-surface border-b border-token text-secondary">
+                <th class="px-3 py-1.5 text-left font-medium">Bucket</th>
+                <th class="px-3 py-1.5 num font-medium">Plays</th>
+                <th class="px-3 py-1.5 num font-medium">Win rate</th>
+                <th class="px-3 py-1.5 num font-medium">Avg P&L</th>
+                <th class="px-3 py-1.5 num font-medium">Total P&L</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderPatterns(closed) {
+    const monthLabels = {};
+    const cards = [
+      patternCard('By DTE at Open',
+        breakdown(closed, p => dteBucket(p.dteAtOpen), DTE_BUCKETS,
+          { '0-7': '0–7d', '8-14': '8–14d', '15-30': '15–30d', '31+': '31d+' }),
+        'do shorter or longer expiries pay better?'),
+      patternCard('By Days Held',
+        breakdown(closed, p => heldBucket(p.daysHeld), HELD_BUCKETS,
+          { '0-3': '0–3d', '4-7': '4–7d', '8-14': '8–14d', '15+': '15d+' }),
+        'quick exits vs holding to expiry'),
+      patternCard('By Premium Size',
+        breakdown(closed, p => premiumBucket(p.premiumTotal), PREMIUM_BUCKETS, PREMIUM_LABELS),
+        'small clips vs big premium plays'),
+      patternCard('By Month Opened',
+        breakdown(closed, p => (p.openDateRaw ?? '').slice(0, 7) || null, monthOptions(), monthLabels),
+        'consistency over time'),
+      patternCard('By Weekday Opened',
+        breakdown(closed, p => weekday(p.openDateRaw), WEEKDAYS),
+        'entry-day effect'),
+      patternCard('By Type × Direction',
+        breakdown(closed, p => `${p.direction === 'sold' ? 'Sold' : 'Bought'} ${p.type === 'P' ? 'puts' : 'calls'}`),
+        'strategy mix'),
+      patternCard('By Underlying',
+        breakdown(closed, p => p.underlying).slice(0, 12),
+        'top 12 by total P&L'),
+      patternCard('By Outcome',
+        breakdown(closed, p => p.outcome, ['expired', 'closed', 'assigned', 'exercised'],
+          { expired: 'Expired worthless', closed: 'Closed early', assigned: 'Assigned', exercised: 'Exercised' })),
+    ];
+    document.getElementById('patterns-grid').innerHTML = cards.join('');
+  }
+
+  // ── Render: donut, put/call, best/worst ─────────────────────
+  function renderOutcomes(closedAndOpen) {
+    chartDefaults();
+    const labelMap = {
+      expired:   ['Expired worthless', '--color-gain'],
+      closed:    ['Closed early',      '--color-sapphire'],
+      assigned:  ['Assigned',          '--color-coral'],
+      exercised: ['Exercised',         '--color-loss'],
+      open:      ['Open',              '--color-border'],
+    };
+    const counts = {};
+    closedAndOpen.forEach(p => counts[p.outcome] = (counts[p.outcome] ?? 0) + 1);
+    const entries = Object.entries(counts);
+    if (outcomeChart) outcomeChart.destroy();
+    outcomeChart = new Chart(document.getElementById('outcome-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: entries.map(([k]) => (labelMap[k] ?? [k])[0]),
+        datasets: [{
+          data: entries.map(([, v]) => v),
+          backgroundColor: entries.map(([k]) => themeColor((labelMap[k] ?? [k, '--color-border'])[1])),
+          borderWidth: 2,
+          borderColor: themeColor('--color-card'),
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, boxHeight: 12 } } },
+      },
+    });
+  }
+
+  function renderPutCall(closed) {
+    const block = (label, right, badgeCls) => {
+      const subset = closed.filter(p => p.type === right);
+      const a = aggregate(subset);
+      return `
+        <div class="bg-card rounded-lg border border-token px-4 py-3.5">
+          <span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${badgeCls} mb-2">${label}</span>
+          <p class="text-lg font-semibold ${pnlColor(a.realized)}">${fmt.pnl(a.realized)}</p>
+          <p class="text-xs text-secondary mt-0.5">${a.closed} closed plays${a.winRate != null ? ' · ' + a.winRate.toFixed(0) + '% win' : ''}</p>
+        </div>`;
+    };
+    document.getElementById('putcall-grid').innerHTML =
+      block('PUTS', 'P', 'badge-put') + block('CALLS', 'C', 'badge-call');
+  }
+
+  function tradeRow(p) {
+    const typeBadge = p.type === 'P'
+      ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-put">PUT</span>`
+      : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-call">CALL</span>`;
+    return `
+      <div class="bg-card rounded-lg border border-token px-4 py-3 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          ${typeBadge}
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-primary truncate">
+              ${p.underlying} $${p.strike.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            </p>
+            <p class="text-xs text-secondary">exp ${p.expiry ?? '—'} · ${p.contracts}x · ${p.outcome}${p.rolled ? ' · roll' : ''}</p>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-sm font-semibold ${pnlColor(p.realizedPnl)}">${fmt.pnl(p.realizedPnl)}</p>
+          <p class="text-xs ${pnlColor(p.pnlPct)}">${fmt.pct(p.pnlPct)}</p>
+        </div>
+      </div>`;
+  }
+
+  function renderBestWorst(closed) {
+    const ranked = [...closed].sort((a, b) => a.realizedPnl - b.realizedPnl);
+    document.getElementById('best-list').innerHTML =
+      ranked.slice(-5).reverse().map(tradeRow).join('') || '<p class="text-sm text-secondary">—</p>';
+    document.getElementById('worst-list').innerHTML =
+      ranked.slice(0, 5).map(tradeRow).join('') || '<p class="text-sm text-secondary">—</p>';
+  }
+
+  // ── Main ────────────────────────────────────────────────────
+  function applyFilters() {
+    const plays = filteredPlays();
+    const closed = plays.filter(p => p.realizedPnl != null);
+
+    document.getElementById('filter-count').textContent =
+      `${plays.length} of ${allPlays.length} plays · ${closed.length} closed`;
+    document.getElementById('headline-scope').textContent =
+      plays.length === allPlays.length ? '(all plays)' : '(filtered)';
+
+    renderHeadline(aggregate(plays));
+    renderProfiles(closed);
+    renderPatterns(closed);
+    renderOutcomes(plays);
+    renderPutCall(closed);
+    renderBestWorst(closed);
+  }
+
+  function onThemeChange() { if (allPlays.length) applyFilters(); }
+
+  async function loadPage() {
+    clearError();
+    try {
+      const resp = await fetch('/api/history');
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load history');
+
+      allPlays = data.plays;
+      setLastSync(data.lastSync);
+
+      const hasData = allPlays.length > 0;
+      document.getElementById('empty-state').classList.toggle('hidden', hasData);
+      document.getElementById('stats-content').classList.toggle('hidden', !hasData);
+      if (!hasData) return;
+
+      populateFilterOptions();
+      applyFilters();
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  loadPage();
+</script>
+{% endblock %}

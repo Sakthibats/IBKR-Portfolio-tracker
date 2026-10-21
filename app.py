@@ -7,9 +7,14 @@ Run:  flask run   (or python app.py)
 import time
 import urllib3
 from datetime import date, datetime, timezone
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
 import requests
 
+import flex
+import snapshot
+
+load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
@@ -154,6 +159,8 @@ def _compute_option_metrics(pos: dict, underlying_price: float | None) -> dict:
       - max_profit  = premium_per_share × |contracts| × multiplier
       - pnl_pct     = unrealized_pnl / max_profit   (how much of premium is pocketed)
       - otm_pct     = distance from strike to underlying (positive = OTM = safe)
+      - breakeven   = strike -/+ premium (put/call) — where the position turns negative
+      - itm_amount  = intrinsic value per share when ITM, else None
       - status      = safe / watch / risk / expired
     """
     avg_price   = abs(pos.get("avgPrice", 0.0))   # premium per share received
@@ -182,6 +189,26 @@ def _compute_option_metrics(pos: dict, underlying_price: float | None) -> dict:
         elif put_or_call == "C":
             otm_pct = (strike - underlying_price) / underlying_price * 100
 
+    # Breakeven — premium shifts the effective strike outward for the seller
+    breakeven = None
+    if strike > 0:
+        if put_or_call == "P":
+            breakeven = strike - avg_price
+        elif put_or_call == "C":
+            breakeven = strike + avg_price
+
+    # Dollars in the money (intrinsic value per share); None when OTM/at the money
+    itm_amount = None
+    if underlying_price and underlying_price > 0 and strike > 0:
+        if put_or_call == "P":
+            intrinsic = strike - underlying_price
+        elif put_or_call == "C":
+            intrinsic = underlying_price - strike
+        else:
+            intrinsic = 0.0
+        if intrinsic > 0:
+            itm_amount = intrinsic
+
     # Health status
     if dte is not None and dte <= 0:
         status = "expired"
@@ -202,6 +229,9 @@ def _compute_option_metrics(pos: dict, underlying_price: float | None) -> dict:
         "pnlPctCaptured":  round(pnl_pct_captured, 1) if pnl_pct_captured is not None else None,
         "underlyingPrice": round(underlying_price, 2) if underlying_price else None,
         "otmPct":          round(otm_pct, 1) if otm_pct is not None else None,
+        "breakeven":       round(breakeven, 4) if breakeven is not None else None,
+        "itmAmount":       round(itm_amount, 4) if itm_amount is not None else None,
+        "itmTotal":        round(itm_amount * abs(qty) * multiplier, 2) if itm_amount is not None else None,
         "status":          status,
     }
 
@@ -274,6 +304,7 @@ def build_portfolio(account_id: str) -> dict:
             "type":          pos.get("putOrCall", ""),           # "P" or "C"
             "strike":        float(pos.get("strike", 0) or 0),
             "expiry":        expiry_fmt,
+            "expiryDate":    exp_date_obj.isoformat() if exp_date_obj else None,  # lets snapshots recompute DTE
             "qty":           int(pos.get("position", 0)),
             "premium":       round(abs(pos.get("avgPrice", 0.0)), 4),  # per share
             "currentPrice":  round(pos.get("mktPrice", 0.0), 4),
@@ -325,15 +356,85 @@ def api_status():
     })
 
 
+@app.route("/history")
+def history_page():
+    return render_template("history.html")
+
+
+@app.route("/stats")
+def stats_page():
+    return render_template("stats.html")
+
+
+@app.route("/trades")
+def trades_page():
+    return render_template("trades.html")
+
+
+@app.route("/trades-stats")
+def trades_stats_page():
+    return render_template("trades_stats.html")
+
+
+@app.route("/api/trades")
+def api_trades():
+    """Return the stock blotter and FIFO-realized sells."""
+    data = flex.build_stock_trades(flex.load_executions())
+    data["lastSync"] = flex.last_sync()
+    return jsonify(data)
+
+
+@app.route("/api/sync", methods=["POST"])
+def api_sync():
+    """Fetch the latest Flex statement and update the local trade cache."""
+    try:
+        result = flex.sync_trades()
+        return jsonify(result)
+    except flex.FlexError as e:
+        return jsonify({"error": "flex_error", "message": str(e)}), 502
+    except requests.RequestException as e:
+        return jsonify({"error": "network_error", "message": str(e)}), 502
+
+
+@app.route("/api/history")
+def api_history():
+    """Return option plays (round trips) built from cached executions."""
+    executions = flex.load_executions()
+    plays = flex.build_plays(executions)
+    return jsonify({
+        "plays":      plays,
+        "executions": len(executions),
+        "lastSync":   flex.last_sync(),
+    })
+
+
+@app.route("/api/stats")
+def api_stats():
+    """Return summary statistics over all cached option plays."""
+    executions = flex.load_executions()
+    plays = flex.build_plays(executions)
+    stats = flex.compute_stats(plays)
+    stats["lastSync"] = flex.last_sync()
+    return jsonify(stats)
+
+
 @app.route("/api/portfolio")
 def api_portfolio():
-    """Return the full portfolio payload."""
-    accounts = get_accounts()
-    if not accounts:
-        return jsonify({"error": "no_accounts", "message": "No accounts found or gateway unreachable."}), 503
+    """Return the live portfolio, or the last saved snapshot when the gateway is down."""
+    accounts  = get_accounts()
+    portfolio = build_portfolio(accounts[0]) if accounts else None
 
-    portfolio = build_portfolio(accounts[0])
-    return jsonify(portfolio)
+    # Missing netLiq means the summary call failed — don't let a partial pull
+    # overwrite a good snapshot
+    if portfolio and "netLiq" in portfolio["account"]:
+        snapshot.save_local(portfolio)
+        portfolio["cloud"] = snapshot.publish(portfolio)
+        return jsonify(portfolio)
+
+    latest = snapshot.load_latest()
+    if latest:
+        return jsonify({**latest, "stale": True})
+    return jsonify({"error": "no_accounts", "message": "No accounts found or gateway unreachable."}), 503
 
 
 if __name__ == "__main__":

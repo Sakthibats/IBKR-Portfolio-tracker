@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% set active_page = 'trades' %}
+{% block title %}Stock Trades — IBKR Portfolio{% endblock %}
+
+{% block content %}
+  <div id="empty-state" class="hidden bg-card border border-token rounded-lg px-6 py-10 text-center">
+    <p class="text-sm font-medium text-primary mb-1">No trade history yet</p>
+    <p class="text-xs text-secondary">Click <span class="font-semibold text-sapphire">Sync</span> in the header to pull the last 365 days of trades from IBKR.</p>
+  </div>
+
+  <div id="trades-content" class="hidden space-y-6">
+
+    <!-- Filters -->
+    <section class="bg-card rounded-lg border border-token p-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs text-secondary mb-1">Symbol</label>
+          <input id="f-symbol" list="symbol-list" class="filter-input w-28" type="text" placeholder="All" oninput="applyFilters()" />
+          <datalist id="symbol-list"></datalist>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Side</label>
+          <select id="f-side" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="BUY">Buys</option>
+            <option value="SELL">Sells</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Tag</label>
+          <select id="f-tag" class="filter-input" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="auto">Auto-invest</option>
+            <option value="fractional">Fractional</option>
+            <option value="assignment">Assignment</option>
+            <option value="reinvest">Reinvest</option>
+            <option value="none">Untagged (manual)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Basis</label>
+          <select id="f-coverage" class="filter-input" onchange="applyFilters()">
+            <option value="">All sells</option>
+            <option value="full">Known basis</option>
+            <option value="partial">Partial basis</option>
+            <option value="unknown">Unknown basis</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">From month</label>
+          <select id="f-month-from" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">To month</label>
+          <select id="f-month-to" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-secondary mb-1">Currency</label>
+          <select id="f-currency" class="filter-input" onchange="applyFilters()"></select>
+        </div>
+        <button onclick="resetFilters()" class="btn-header" style="height: 34px;">Reset</button>
+        <span id="filter-count" class="text-xs text-secondary pb-2 ml-auto"></span>
+      </div>
+    </section>
+
+    <!-- Realized sells (FIFO) -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
+          Realized Sells
+          <span id="sells-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
+        </h2>
+        <span class="text-xs text-secondary">FIFO within the statement window · P&amp;L includes commissions</span>
+      </div>
+      <div class="table-wrap">
+        <table id="sells-table" class="data-table w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-surface border-b border-token">
+              <th class="px-4 py-2.5 text-left sortable" data-col="symbol" onclick="sortSells('symbol')">Symbol <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-left sortable sort-active" data-col="dateRaw" onclick="sortSells('dateRaw')">Date <span class="sort-icon">↓</span></th>
+              <th class="px-4 py-2.5 num sortable" data-col="qty" onclick="sortSells('qty')">Qty <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable" data-col="sellPrice" onclick="sortSells('sellPrice')">Sell Px <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable hidden sm:table-cell" data-col="avgCost" onclick="sortSells('avgCost')">Avg Cost <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable hidden md:table-cell" data-col="daysHeld" onclick="sortSells('daysHeld')">Held <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable" data-col="realizedPnl" onclick="sortSells('realizedPnl')">P&amp;L <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable hidden lg:table-cell" data-col="pnlPct" onclick="sortSells('pnlPct')">P&amp;L % <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-center">Basis</th>
+              <th class="px-4 py-2.5 text-left hidden xl:table-cell">Tags</th>
+            </tr>
+          </thead>
+          <tbody id="sells-body" class="bg-card"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Blotter -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
+          All Executions
+          <span id="blotter-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
+        </h2>
+      </div>
+      <div class="table-wrap">
+        <table id="blotter-table" class="data-table w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-surface border-b border-token">
+              <th class="px-4 py-2.5 text-left sortable sort-active" data-col="dateRaw" onclick="sortBlotter('dateRaw')">Date <span class="sort-icon">↓</span></th>
+              <th class="px-4 py-2.5 text-left sortable" data-col="symbol" onclick="sortBlotter('symbol')">Symbol <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-center sortable" data-col="side" onclick="sortBlotter('side')">Side <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable" data-col="qty" onclick="sortBlotter('qty')">Qty <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable" data-col="price" onclick="sortBlotter('price')">Price <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable hidden sm:table-cell" data-col="value" onclick="sortBlotter('value')">Value <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num sortable hidden md:table-cell" data-col="commission" onclick="sortBlotter('commission')">Comm <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 text-left hidden lg:table-cell">Tags</th>
+            </tr>
+          </thead>
+          <tbody id="blotter-body" class="bg-card"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-secondary mt-2">Showing up to 200 rows — narrow with filters to see specific trades.</p>
+    </section>
+
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let allSells = [];
+  let allBlotter = [];
+  const sellSort = { key: 'dateRaw', dir: 'desc' };
+  const blotterSort = { key: 'dateRaw', dir: 'desc' };
+
+  const tagBadge = t => `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium badge-expired mr-1">${t}</span>`;
+  function coverageBadge(c) {
+    const map = {
+      full:    ['badge-safe', 'Known'],
+      partial: ['badge-watch', 'Partial'],
+      unknown: ['badge-risk', 'Unknown'],
+    };
+    const [cls, label] = map[c] ?? ['badge-expired', c];
+    return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}" title="Cost-basis coverage within the statement window">${label}</span>`;
+  }
+
+  // ── Filters ─────────────────────────────────────────────────
+  function matches(row, f, isSell) {
+    const month = (row.dateRaw ?? '').slice(0, 7);
+    const tagOk = !f.tag
+      || (f.tag === 'none' ? row.tags.length === 0 : row.tags.includes(f.tag));
+    return (!f.symbol || row.symbol.toUpperCase().includes(f.symbol))
+      && (!f.side || isSell || row.side === f.side)
+      && tagOk
+      && (!f.coverage || !isSell || row.coverage === f.coverage)
+      && (!f.monthFrom || month >= f.monthFrom)
+      && (!f.monthTo || month <= f.monthTo)
+      && (!f.currency || row.currency === f.currency);
+  }
+
+  function getFilters() {
+    return {
+      symbol:    document.getElementById('f-symbol').value.trim().toUpperCase(),
+      side:      document.getElementById('f-side').value,
+      tag:       document.getElementById('f-tag').value,
+      coverage:  document.getElementById('f-coverage').value,
+      monthFrom: document.getElementById('f-month-from').value,
+      monthTo:   document.getElementById('f-month-to').value,
+      currency:  document.getElementById('f-currency').value,
+    };
+  }
+
+  function resetFilters() {
+    document.getElementById('f-symbol').value = '';
+    ['f-side', 'f-tag', 'f-coverage', 'f-currency'].forEach(id =>
+      document.getElementById(id).selectedIndex = 0);
+    const months = monthOptions();
+    document.getElementById('f-month-from').value = months[0] ?? '';
+    document.getElementById('f-month-to').value = months[months.length - 1] ?? '';
+    applyFilters();
+  }
+
+  function monthOptions() {
+    return [...new Set(allBlotter.map(b => (b.dateRaw ?? '').slice(0, 7)).filter(Boolean))].sort();
+  }
+
+  function populateFilterOptions() {
+    const symbols = [...new Set(allBlotter.map(b => b.symbol))].sort();
+    document.getElementById('symbol-list').innerHTML =
+      symbols.map(s => `<option value="${s}">`).join('');
+
+    const months = monthOptions();
+    const opts = months.map(m => `<option value="${m}">${m}</option>`).join('');
+    document.getElementById('f-month-from').innerHTML = opts;
+    document.getElementById('f-month-to').innerHTML = opts;
+    document.getElementById('f-month-from').value = months[0] ?? '';
+    document.getElementById('f-month-to').value = months[months.length - 1] ?? '';
+
+    const currencies = [...new Set(allBlotter.map(b => b.currency))].sort();
+    document.getElementById('f-currency').innerHTML = currencies.length > 1
+      ? '<option value="">All</option>' + currencies.map(c => `<option value="${c}">${c}</option>`).join('')
+      : `<option value="">${currencies[0] ?? 'USD'}</option>`;
+  }
+
+  // ── Sorting ─────────────────────────────────────────────────
+  function sortRows(rows, state) {
+    return [...rows].sort((a, b) => {
+      let av = a[state.key], bv = b[state.key];
+      const str = typeof av === 'string' || typeof bv === 'string';
+      if (av == null) av = str ? '￿' : -Infinity;
+      if (bv == null) bv = str ? '￿' : -Infinity;
+      const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+      return state.dir === 'asc' ? cmp : -cmp;
+    });
+  }
+  function toggleSort(state, key) {
+    if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+    else { state.key = key; state.dir = 'asc'; }
+  }
+  function sortSells(key) { toggleSort(sellSort, key); applyFilters(); }
+  function sortBlotter(key) { toggleSort(blotterSort, key); applyFilters(); }
+
+  function syncHeaders(tableId, state) {
+    document.querySelectorAll(`#${tableId} th[data-col]`).forEach(th => {
+      const active = state.key === th.dataset.col;
+      th.classList.toggle('sort-active', active);
+      const icon = th.querySelector('.sort-icon');
+      if (icon) icon.textContent = active ? (state.dir === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  function renderSells(rows) {
+    document.getElementById('sells-count').textContent = `(${rows.length} of ${allSells.length})`;
+    const tbody = document.getElementById('sells-body');
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-sm text-secondary">No sells match the filters</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(s => `
+      <tr class="transition-colors">
+        <td class="px-4 py-3 font-medium text-primary whitespace-nowrap">${s.symbol}${s.currency !== 'USD' ? ` <span class="text-xs text-secondary">${s.currency}</span>` : ''}</td>
+        <td class="px-4 py-3 text-secondary text-xs whitespace-nowrap">${s.date ?? '—'}</td>
+        <td class="px-4 py-3 num text-primary">${s.qty}</td>
+        <td class="px-4 py-3 num text-primary">${fmt.usd(s.sellPrice)}</td>
+        <td class="px-4 py-3 num text-secondary hidden sm:table-cell">${s.avgCost != null ? fmt.usd(s.avgCost) : '—'}</td>
+        <td class="px-4 py-3 num text-secondary hidden md:table-cell">${s.daysHeld != null ? s.daysHeld + 'd' : '—'}</td>
+        <td class="px-4 py-3 num ${pnlColor(s.realizedPnl)} font-medium">${s.realizedPnl != null ? fmt.pnl(s.realizedPnl) : '—'}</td>
+        <td class="px-4 py-3 num ${pnlColor(s.pnlPct)} hidden lg:table-cell">${fmt.pct(s.pnlPct)}</td>
+        <td class="px-4 py-3 text-center">${coverageBadge(s.coverage)}</td>
+        <td class="px-4 py-3 hidden xl:table-cell">${s.tags.map(tagBadge).join('')}</td>
+      </tr>`).join('');
+  }
+
+  function renderBlotter(rows) {
+    document.getElementById('blotter-count').textContent = `(${rows.length} of ${allBlotter.length})`;
+    const tbody = document.getElementById('blotter-body');
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-secondary">No executions match the filters</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.slice(0, 200).map(b => {
+      const sideBadge = b.side === 'BUY'
+        ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-safe">BUY</span>`
+        : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-risk">SELL</span>`;
+      return `
+        <tr class="transition-colors">
+          <td class="px-4 py-3 text-secondary text-xs whitespace-nowrap">${b.date ?? '—'}</td>
+          <td class="px-4 py-3 font-medium text-primary whitespace-nowrap">
+            ${b.symbol}${b.currency !== 'USD' ? ` <span class="text-xs text-secondary">${b.currency}</span>` : ''}
+            <div class="text-xs text-secondary font-normal hidden md:block truncate max-w-[180px]">${b.name}</div>
+          </td>
+          <td class="px-4 py-3 text-center">${sideBadge}</td>
+          <td class="px-4 py-3 num text-primary">${b.qty}</td>
+          <td class="px-4 py-3 num text-primary">${fmt.usd(b.price)}</td>
+          <td class="px-4 py-3 num text-secondary hidden sm:table-cell">${fmt.pnl(b.value)}</td>
+          <td class="px-4 py-3 num text-secondary hidden md:table-cell">${fmt.usd(b.commission)}</td>
+          <td class="px-4 py-3 hidden lg:table-cell">${b.tags.map(tagBadge).join('')}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function applyFilters() {
+    const f = getFilters();
+    const sells = sortRows(allSells.filter(s => matches(s, f, true)), sellSort);
+    const blotter = sortRows(allBlotter.filter(b => matches(b, f, false)), blotterSort);
+    document.getElementById('filter-count').textContent =
+      `${blotter.length} executions · ${sells.length} sells`;
+    renderSells(sells);
+    renderBlotter(blotter);
+    syncHeaders('sells-table', sellSort);
+    syncHeaders('blotter-table', blotterSort);
+  }
+
+  async function loadPage() {
+    clearError();
+    try {
+      const resp = await fetch('/api/trades');
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load trades');
+
+      allSells = data.sells;
+      allBlotter = data.blotter;
+      setLastSync(data.lastSync);
+
+      const hasData = allBlotter.length > 0;
+      document.getElementById('empty-state').classList.toggle('hidden', hasData);
+      document.getElementById('trades-content').classList.toggle('hidden', !hasData);
+      if (!hasData) return;
+
+      populateFilterOptions();
+      applyFilters();
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  loadPage();
+</script>
+{% endblock %}

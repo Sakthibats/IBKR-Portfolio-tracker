@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% set active_page = 'history' %}
+{% block title %}Options History — IBKR Portfolio{% endblock %}
+
+{% block content %}
+  <!-- Empty state (no data yet) -->
+  <div id="empty-state" class="hidden bg-card border border-token rounded-lg px-6 py-10 text-center">
+    <p class="text-sm font-medium text-primary mb-1">No trade history yet</p>
+    <p class="text-xs text-secondary">Click <span class="font-semibold text-sapphire">Sync</span> in the header to pull the last 365 days of option trades from IBKR.</p>
+  </div>
+
+  <!-- Chart -->
+  <section id="chart-section" class="hidden">
+    <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading mb-3">
+      Premium &amp; Realized P&amp;L by Month
+    </h2>
+    <div class="bg-card rounded-lg border border-token p-4">
+      <div class="relative h-64"><canvas id="monthly-chart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Trades table -->
+  <section id="table-section" class="hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
+        Option Plays
+        <span id="plays-count" class="ml-1.5 text-xs font-normal text-secondary"></span>
+      </h2>
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="filter-ticker" class="filter-input w-32" type="text" placeholder="Ticker…" oninput="applyFilters()" />
+        <select id="filter-type" class="filter-input" onchange="applyFilters()">
+          <option value="">Puts &amp; Calls</option>
+          <option value="P">Puts</option>
+          <option value="C">Calls</option>
+        </select>
+        <select id="filter-outcome" class="filter-input" onchange="applyFilters()">
+          <option value="">All outcomes</option>
+          <option value="open">Open</option>
+          <option value="expired">Expired</option>
+          <option value="closed">Closed</option>
+          <option value="assigned">Assigned</option>
+          <option value="exercised">Exercised</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="plays-table" class="data-table w-full text-sm border-collapse">
+        <thead>
+          <tr class="bg-surface border-b border-token">
+            <th class="px-4 py-2.5 text-left sortable" data-col="underlying"   onclick="handleSort('underlying')">Symbol <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 text-center sortable" data-col="type"       onclick="handleSort('type')">Type <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable" data-col="strike"             onclick="handleSort('strike')">Strike <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 text-left sortable hidden sm:table-cell" data-col="expiryRaw" onclick="handleSort('expiryRaw')">Expiry <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 text-left sortable sort-active" data-col="openDateRaw" onclick="handleSort('openDateRaw')">Opened <span class="sort-icon">↓</span></th>
+            <th class="px-4 py-2.5 text-left sortable hidden md:table-cell" data-col="closeDateRaw" onclick="handleSort('closeDateRaw')">Closed <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable hidden lg:table-cell" data-col="daysHeld" onclick="handleSort('daysHeld')">Held <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable hidden md:table-cell" data-col="contracts" onclick="handleSort('contracts')">Qty <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable" data-col="openPrice"          onclick="handleSort('openPrice')">Open Px <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable hidden lg:table-cell" data-col="closePrice" onclick="handleSort('closePrice')">Close Px <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable" data-col="premiumTotal"       onclick="handleSort('premiumTotal')">Premium <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable" data-col="realizedPnl"        onclick="handleSort('realizedPnl')">P&amp;L <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 num sortable hidden xl:table-cell" data-col="pnlPct" onclick="handleSort('pnlPct')">P&amp;L % <span class="sort-icon">↕</span></th>
+            <th class="px-4 py-2.5 text-center sortable" data-col="outcome"    onclick="handleSort('outcome')">Outcome <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="plays-body" class="bg-card"></tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let rawPlays = [];
+  let monthlyData = [];
+  let monthlyChart = null;
+  const sortState = { key: 'openDateRaw', dir: 'desc' };
+
+  const COL_TYPE = {
+    underlying: 'str', type: 'str', expiryRaw: 'str', openDateRaw: 'str',
+    closeDateRaw: 'str', outcome: 'str',
+    strike: 'num', daysHeld: 'num', contracts: 'num', openPrice: 'num',
+    closePrice: 'num', premiumTotal: 'num', realizedPnl: 'num', pnlPct: 'num',
+  };
+
+  function outcomeBadge(p) {
+    const map = {
+      open:      ['badge-safe',    'Open'],
+      expired:   ['badge-expired', 'Expired'],
+      closed:    ['badge-watch',   'Closed'],
+      assigned:  ['badge-risk',    'Assigned'],
+      exercised: ['badge-risk',    'Exercised'],
+    };
+    const [cls, label] = map[p.outcome] ?? ['badge-expired', p.outcome];
+    const roll = p.rolled ? ' <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium badge-expired" title="Part of a roll">↻</span>' : '';
+    return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}">${label}</span>${roll}`;
+  }
+
+  function directionNote(p) {
+    return p.direction === 'sold'
+      ? '<span class="text-xs text-secondary">STO</span>'
+      : '<span class="text-xs text-secondary">BTO</span>';
+  }
+
+  // ── Filtering + sorting ─────────────────────────────────────
+  function filteredPlays() {
+    const ticker = document.getElementById('filter-ticker').value.trim().toUpperCase();
+    const type = document.getElementById('filter-type').value;
+    const outcome = document.getElementById('filter-outcome').value;
+    return rawPlays.filter(p =>
+      (!ticker || p.underlying.toUpperCase().includes(ticker)) &&
+      (!type || p.type === type) &&
+      (!outcome || p.outcome === outcome)
+    );
+  }
+
+  function handleSort(key) {
+    if (sortState.key === key) {
+      sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortState.key = key;
+      sortState.dir = 'asc';
+    }
+    applyFilters();
+  }
+
+  function applyFilters() {
+    let rows = filteredPlays();
+    const { key, dir } = sortState;
+    const type = COL_TYPE[key] || 'str';
+    rows.sort((a, b) => {
+      let av = a[key], bv = b[key];
+      if (av == null) av = type === 'str' ? '￿' : -Infinity;
+      if (bv == null) bv = type === 'str' ? '￿' : -Infinity;
+      const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    renderPlays(rows);
+    syncSortHeaders();
+  }
+
+  function syncSortHeaders() {
+    document.querySelectorAll('#plays-table th[data-col]').forEach(th => {
+      const active = sortState.key === th.dataset.col;
+      th.classList.toggle('sort-active', active);
+      const icon = th.querySelector('.sort-icon');
+      if (icon) icon.textContent = active ? (sortState.dir === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  function renderPlays(plays) {
+    document.getElementById('plays-count').textContent = `(${plays.length} of ${rawPlays.length})`;
+    const tbody = document.getElementById('plays-body');
+    if (!plays.length) {
+      tbody.innerHTML = `<tr><td colspan="14" class="px-4 py-6 text-center text-sm text-secondary">No plays match the filters</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = plays.map(p => {
+      const typeBadge = p.type === 'P'
+        ? `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-put">PUT</span>`
+        : `<span class="inline-block px-1.5 py-0.5 text-xs rounded font-semibold badge-call">CALL</span>`;
+      const premiumCls = p.direction === 'sold' ? 'text-gain' : 'text-coral';
+      const premiumSign = p.direction === 'sold' ? '+' : '-';
+      return `
+        <tr class="transition-colors">
+          <td class="px-4 py-3 font-medium text-primary whitespace-nowrap">${p.underlying} ${directionNote(p)}</td>
+          <td class="px-4 py-3 text-center">${typeBadge}</td>
+          <td class="px-4 py-3 num text-primary">$${p.strike.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+          <td class="px-4 py-3 text-secondary text-xs hidden sm:table-cell whitespace-nowrap">${p.expiry ?? '—'}</td>
+          <td class="px-4 py-3 text-secondary text-xs whitespace-nowrap">${p.openDate ?? '—'}</td>
+          <td class="px-4 py-3 text-secondary text-xs hidden md:table-cell whitespace-nowrap">${p.closeDate ?? '—'}</td>
+          <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${p.daysHeld != null ? p.daysHeld + 'd' : '—'}</td>
+          <td class="px-4 py-3 num text-secondary hidden md:table-cell">${p.contracts}</td>
+          <td class="px-4 py-3 num text-primary">${fmt.usd(p.openPrice)}</td>
+          <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${p.closePrice != null ? fmt.usd(p.closePrice) : '—'}</td>
+          <td class="px-4 py-3 num ${premiumCls}" title="${p.direction === 'sold' ? 'Premium collected' : 'Premium paid'}">${premiumSign}${fmt.usd(p.premiumTotal)}</td>
+          <td class="px-4 py-3 num ${pnlColor(p.realizedPnl)} font-medium">${p.realizedPnl != null ? fmt.pnl(p.realizedPnl) : '—'}</td>
+          <td class="px-4 py-3 num ${pnlColor(p.pnlPct)} hidden xl:table-cell">${fmt.pct(p.pnlPct)}</td>
+          <td class="px-4 py-3 text-center whitespace-nowrap">${outcomeBadge(p)}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function renderChart() {
+    chartDefaults();
+    const labels = monthlyData.map(m => m.month);
+    let cum = 0;
+    const cumulative = monthlyData.map(m => +(cum += m.realizedPnl).toFixed(2));
+    if (monthlyChart) monthlyChart.destroy();
+    monthlyChart = new Chart(document.getElementById('monthly-chart'), {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Premium collected',
+            data: monthlyData.map(m => m.premium),
+            backgroundColor: themeColor('--color-sapphire'),
+            borderRadius: 4,
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Cumulative realized P&L',
+            data: cumulative,
+            borderColor: themeColor('--color-coral'),
+            backgroundColor: themeColor('--color-coral'),
+            tension: 0.3,
+            pointRadius: 3,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { boxWidth: 12, boxHeight: 12 } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt.pnl(ctx.parsed.y)}` } },
+        },
+        scales: {
+          y: { ticks: { callback: v => '$' + v.toLocaleString('en-US') } },
+        },
+      },
+    });
+  }
+
+  function onThemeChange() { if (monthlyData.length) renderChart(); }
+
+  // ── Load ────────────────────────────────────────────────────
+  async function loadPage() {
+    clearError();
+    try {
+      const [histResp, statsResp] = await Promise.all([fetch('/api/history'), fetch('/api/stats')]);
+      const hist = await histResp.json();
+      const stats = await statsResp.json();
+      if (!histResp.ok || hist.error) throw new Error(hist.message || 'Failed to load history');
+
+      rawPlays = hist.plays;
+      monthlyData = stats.monthly ?? [];
+      setLastSync(hist.lastSync);
+
+      const hasData = rawPlays.length > 0;
+      document.getElementById('empty-state').classList.toggle('hidden', hasData);
+      document.getElementById('table-section').classList.toggle('hidden', !hasData);
+      document.getElementById('chart-section').classList.toggle('hidden', !hasData);
+      if (hasData) {
+        applyFilters();
+        renderChart();
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  loadPage();
+</script>
+{% endblock %}

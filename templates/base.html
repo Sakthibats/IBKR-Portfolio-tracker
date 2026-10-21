@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}IBKR Portfolio{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231B2E4B'/><polyline points='4,24 10,17 16,19 22,10 28,14' stroke='%23D85A30' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='14' r='2.5' fill='%23D85A30'/></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --color-page:           #FFFFFF;
+      --color-surface:        #EEF3FA;
+      --color-card:           #FFFFFF;
+      --color-border:         #C5D3E8;
+      --color-text-primary:   #0F172A;
+      --color-text-secondary: #4A5E7A;
+      --color-sapphire:       #1B75CC;
+      --color-royal:          #134E9A;
+      --color-sapphire-subtle:#DFF0FF;
+      --color-coral:          #C84520;
+      --color-coral-subtle:   #FAE8E2;
+      --color-gain:           #0C8A5E;
+      --color-gain-subtle:    #DFFAF0;
+      --color-loss:           #D42828;
+      --color-loss-subtle:    #FDEAEA;
+      --color-header-bg:      #EDF3FD;
+      --color-header-fg:      #0F172A;
+      --color-header-muted:   #4A5E7A;
+    }
+    [data-theme="dark"] {
+      --color-page:           #080D18;
+      --color-surface:        #0F1929;
+      --color-card:           #162035;
+      --color-border:         #1E3050;
+      --color-text-primary:   #E8EBF2;
+      --color-text-secondary: #7A90B0;
+      --color-sapphire:       #5AAAE8;
+      --color-royal:          #90C4F8;
+      --color-sapphire-subtle:#0C3560;
+      --color-coral:          #F07855;
+      --color-coral-subtle:   #5C1C08;
+      --color-gain:           #3DC89A;
+      --color-gain-subtle:    #063D2C;
+      --color-loss:           #F06868;
+      --color-loss-subtle:    #5C1212;
+      --color-header-bg:      #060E1C;
+      --color-header-fg:      #C8D8EC;
+      --color-header-muted:   #5A7090;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      background: var(--color-page);
+      color: var(--color-text-primary);
+    }
+
+    .data-table tbody tr:hover { background: var(--color-surface); }
+
+    @keyframes pulse-bg { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .skeleton { background: var(--color-border); border-radius: 4px; animation: pulse-bg 1.5s ease-in-out infinite; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 0.8s linear infinite; }
+
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 0.5px solid var(--color-border); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { background: var(--color-surface); color: var(--color-text-primary); }
+    th.sortable .sort-icon { display: inline-block; margin-left: 3px; font-size: 9px; opacity: 0.3; vertical-align: middle; line-height: 1; }
+    th.sortable.sort-active { color: var(--color-sapphire); }
+    th.sortable.sort-active .sort-icon { opacity: 1; }
+
+    .bg-page    { background-color: var(--color-page); }
+    .bg-surface { background-color: var(--color-surface); }
+    .bg-card    { background-color: var(--color-card); }
+    .bg-sapphire        { background-color: var(--color-sapphire); }
+    .bg-coral           { background-color: var(--color-coral); }
+    .bg-sapphire-subtle { background-color: var(--color-sapphire-subtle); }
+    .bg-coral-subtle    { background-color: var(--color-coral-subtle); }
+    .bg-gain-subtle     { background-color: var(--color-gain-subtle); }
+    .bg-loss-subtle     { background-color: var(--color-loss-subtle); }
+
+    .bg-header { background-color: var(--color-header-bg); border-bottom: 2px solid var(--color-sapphire); }
+    .text-header-fg    { color: var(--color-header-fg); }
+    .text-header-muted { color: var(--color-header-muted); }
+
+    [data-theme="dark"] .bg-header .btn-header {
+      color: var(--color-header-fg);
+      border-color: rgba(255,255,255,0.15);
+    }
+    [data-theme="dark"] .bg-header .btn-header:hover  { background-color: rgba(255,255,255,0.07); }
+    [data-theme="dark"] .bg-header .btn-header:active { background-color: rgba(255,255,255,0.11); }
+
+    .section-heading { border-left: 3px solid var(--color-coral); padding-left: 0.625rem; }
+
+    .text-primary   { color: var(--color-text-primary); }
+    .text-secondary { color: var(--color-text-secondary); }
+    .text-sapphire  { color: var(--color-sapphire); }
+    .text-royal     { color: var(--color-royal); }
+    .text-coral     { color: var(--color-coral); }
+    .text-gain      { color: var(--color-gain); }
+    .text-loss      { color: var(--color-loss); }
+
+    .border-token { border-color: var(--color-border) !important; }
+    .data-table tbody tr + tr { border-top: 0.5px solid var(--color-border); }
+
+    .badge-put     { background-color: var(--color-sapphire); color: #ffffff; outline: none; }
+    .badge-call    { background-color: var(--color-coral);    color: #ffffff; outline: none; }
+    .badge-safe    { background-color: var(--color-gain-subtle);  color: var(--color-gain);  outline: 1px solid var(--color-gain);  outline-offset: -1px; }
+    .badge-watch   { background-color: var(--color-coral-subtle); color: var(--color-coral); outline: 1px solid var(--color-coral); outline-offset: -1px; }
+    .badge-risk    { background-color: var(--color-loss-subtle);  color: var(--color-loss);  outline: 1px solid var(--color-loss);  outline-offset: -1px; }
+    .badge-expired { background-color: var(--color-surface); color: var(--color-text-secondary); outline: 1px solid var(--color-border); outline-offset: -1px; }
+
+    .bar-track { background-color: var(--color-surface); }
+
+    .btn-header {
+      display: flex; align-items: center; gap: 0.375rem;
+      padding: 0.375rem 0.625rem; font-size: 0.75rem; font-weight: 500;
+      color: var(--color-sapphire); border: 0.5px solid var(--color-sapphire-subtle);
+      border-radius: 0.375rem; background: transparent; cursor: pointer;
+    }
+    .btn-header:hover { background-color: var(--color-sapphire-subtle); }
+
+    /* Nav links */
+    .nav-link {
+      font-size: 0.8125rem; font-weight: 500; color: var(--color-header-muted);
+      padding: 0.25rem 0.125rem; border-bottom: 2px solid transparent;
+    }
+    .nav-link:hover { color: var(--color-header-fg); }
+    .nav-link.active { color: var(--color-header-fg); border-bottom-color: var(--color-coral); }
+
+    /* Filter controls */
+    .filter-input {
+      background: var(--color-card); color: var(--color-text-primary);
+      border: 0.5px solid var(--color-border); border-radius: 0.375rem;
+      padding: 0.375rem 0.625rem; font-size: 0.8125rem;
+    }
+    .filter-input:focus { outline: 1.5px solid var(--color-sapphire); border-color: transparent; }
+
+    body, header, main, section, div, td, th, span, button, a, p {
+      transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <header class="bg-header sticky top-0 z-10">
+    <div class="max-w-screen-xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-3">
+          <div class="w-7 h-7 rounded-md bg-sapphire flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13l4-4 4 4 4-6 4 3" />
+            </svg>
+          </div>
+          <span class="font-semibold text-header-fg text-sm tracking-tight">IBKR Portfolio</span>
+        </div>
+        <nav class="flex items-center gap-4">
+          <a href="/" class="nav-link {% if active_page == 'portfolio' %}active{% endif %}">Portfolio</a>
+          <a href="/history" class="nav-link {% if active_page == 'history' %}active{% endif %}">Options</a>
+          <a href="/stats" class="nav-link {% if active_page == 'stats' %}active{% endif %}">Options Stats</a>
+          <a href="/trades" class="nav-link {% if active_page == 'trades' %}active{% endif %}">Trades</a>
+          <a href="/trades-stats" class="nav-link {% if active_page == 'trades-stats' %}active{% endif %}">Trade Stats</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <span id="last-sync" class="text-xs text-header-muted hidden sm:block"></span>
+        <button id="sync-btn" onclick="syncTrades()" class="btn-header" title="Fetch latest trades from IBKR Flex">
+          <svg id="sync-icon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 4v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Sync
+        </button>
+        <button id="theme-toggle" onclick="toggleTheme()" class="btn-header" aria-label="Toggle colour theme">
+          <svg id="theme-icon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
+    <!-- Error banner -->
+    <div id="error-banner" class="hidden bg-loss-subtle border border-loss rounded-lg px-4 py-3
+         flex items-start gap-3 text-sm text-loss">
+      <svg class="w-4 h-4 mt-0.5 shrink-0 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p id="error-msg" class="font-medium"></p>
+    </div>
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    // ── Shared helpers ──────────────────────────────────────────
+    const fmt = {
+      usd: v => v == null ? '—' : '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      pnl: v => v == null ? '—' : (v >= 0 ? '+' : '-') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      pct: v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%',
+      num: v => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+      int: v => v == null ? '—' : Math.round(v).toLocaleString('en-US'),
+    };
+    const pnlColor = v => v == null ? 'text-secondary' : (v >= 0 ? 'text-gain' : 'text-loss');
+
+    function showError(msg) {
+      document.getElementById('error-msg').textContent = msg;
+      document.getElementById('error-banner').classList.remove('hidden');
+    }
+    function clearError() { document.getElementById('error-banner').classList.add('hidden'); }
+
+    function setLastSync(iso) {
+      const el = document.getElementById('last-sync');
+      if (!iso) { el.textContent = 'Never synced'; return; }
+      const d = new Date(iso);
+      el.textContent = 'Synced ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+        ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function syncTrades() {
+      const btn = document.getElementById('sync-btn');
+      const icon = document.getElementById('sync-icon');
+      btn.disabled = true;
+      icon.classList.add('spinning');
+      clearError();
+      try {
+        const resp = await fetch('/api/sync', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.message || 'Sync failed');
+        setLastSync(data.lastSync);
+        if (typeof loadPage === 'function') loadPage();
+      } catch (e) {
+        showError('Sync failed: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        icon.classList.remove('spinning');
+      }
+    }
+
+    // ── Chart.js theme helpers ──────────────────────────────────
+    function themeColor(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function chartDefaults() {
+      Chart.defaults.color = themeColor('--color-text-secondary');
+      Chart.defaults.borderColor = themeColor('--color-border');
+      Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif';
+    }
+
+    // ── Theme ───────────────────────────────────────────────────
+    const MOON_PATH = 'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z';
+    const SUN_PATH  = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z';
+
+    function applyTheme(theme) {
+      const html = document.documentElement;
+      const iconPath = document.querySelector('#theme-icon path');
+      if (theme === 'dark') {
+        html.setAttribute('data-theme', 'dark');
+        if (iconPath) iconPath.setAttribute('d', SUN_PATH);
+      } else {
+        html.removeAttribute('data-theme');
+        if (iconPath) iconPath.setAttribute('d', MOON_PATH);
+      }
+    }
+    function toggleTheme() {
+      const next = (localStorage.getItem('theme') ?? 'light') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('theme', next);
+      applyTheme(next);
+      if (typeof onThemeChange === 'function') onThemeChange();
+    }
+    applyTheme(localStorage.getItem('theme') ?? 'light');
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
