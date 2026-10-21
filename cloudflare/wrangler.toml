@@ -1,0 +1,10 @@
+# Cloudflare Pages project for the read-only portfolio snapshot.
+# Deploy with ./deploy.sh (builds public/index.html, then `wrangler pages deploy`).
+name = "ibkr-portfolio"
+pages_build_output_dir = "public"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "SNAPSHOTS"
+# Paste the id printed by: npx wrangler kv namespace create SNAPSHOTS
+id = "0a19dd2b80d345f78b3485ff6e9cea77"

@@ -224,7 +224,7 @@
           </div>
           <span class="font-semibold text-header-fg text-sm tracking-tight">IBKR Portfolio</span>
         </div>
-        <nav class="flex items-center gap-4">
+        <nav id="main-nav" class="flex items-center gap-4">
           <a href="/" class="nav-link active">Portfolio</a>
           <a href="/history" class="nav-link">Options</a>
           <a href="/stats" class="nav-link">Options Stats</a>
@@ -269,20 +269,47 @@
       </svg>
       <div>
         <p id="error-msg" class="font-medium"></p>
-        <p class="text-loss mt-0.5">
+        <p id="error-hint" class="text-loss mt-0.5">
           Make sure the IBKR Client Portal Gateway is running and you are logged in at
           <a href="https://localhost:5001" target="_blank" class="underline hover:text-primary">https://localhost:5001</a>
         </p>
       </div>
     </div>
 
+    <!-- Snapshot banner — shown when the numbers come from a saved pull -->
+    <div id="stale-banner" class="hidden bg-sapphire-subtle rounded-lg px-4 py-3
+         flex items-start gap-3 text-sm text-primary">
+      <svg class="w-4 h-4 mt-0.5 shrink-0 text-sapphire" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p id="stale-msg"></p>
+    </div>
+
+    <!-- Unlock card — snapshot mode only; the passphrase decrypts the snapshot in the browser -->
+    <section id="unlock-card" class="hidden">
+      <form onsubmit="unlockSnapshot(event)"
+        class="max-w-sm mx-auto bg-card border border-token rounded-lg px-5 py-5 space-y-3">
+        <h2 class="text-sm font-semibold text-primary">Unlock portfolio snapshot</h2>
+        <p id="unlock-sub" class="text-xs text-secondary"></p>
+        <input id="unlock-pass" type="password" autocomplete="current-password" placeholder="Passphrase" required
+          class="w-full px-3 py-2 text-base rounded-md border border-token bg-page text-primary" />
+        <label class="flex items-center gap-2 text-xs text-secondary">
+          <input id="unlock-remember" type="checkbox" checked /> Remember on this device
+        </label>
+        <p id="unlock-err" class="hidden text-xs text-loss">Wrong passphrase — try again.</p>
+        <button type="submit" class="w-full px-3 py-2 text-sm font-medium rounded-md bg-sapphire text-white">
+          Unlock
+        </button>
+      </form>
+    </section>
+
     <!-- ── ACCOUNT SUMMARY ──────────────────────────────────── -->
-    <section>
+    <section class="data-section">
       <div id="summary-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
     </section>
 
     <!-- ── STOCK POSITIONS ──────────────────────────────────── -->
-    <section>
+    <section class="data-section">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
           Stock Positions
@@ -312,7 +339,7 @@
     </section>
 
     <!-- ── OPTIONS POSITIONS ────────────────────────────────── -->
-    <section>
+    <section class="data-section">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold text-primary uppercase tracking-wider section-heading">
           Options Positions
@@ -335,7 +362,9 @@
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="premium"  onclick="handleSort('options','premium')">          Premium     <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="currentPrice" onclick="handleSort('options','currentPrice')"> Current     <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="underlyingPrice" onclick="handleSort('options','underlyingPrice')"> Underlying  <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable hidden lg:table-cell" data-col="breakeven"       onclick="handleSort('options','breakeven')">        Breakeven   <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="otmPct"                        onclick="handleSort('options','otmPct')">           % OTM       <span class="sort-icon">↕</span></th>
+              <th class="px-4 py-2.5 num         sortable" data-col="itmAmount"                     onclick="handleSort('options','itmAmount')">        $ ITM       <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable" data-col="delta"                         onclick="handleSort('options','delta')">            Delta       <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden sm:table-cell" data-col="unrealizedPnl" onclick="handleSort('options','unrealizedPnl')"> P&amp;L    <span class="sort-icon">↕</span></th>
               <th class="px-4 py-2.5 num         sortable hidden md:table-cell" data-col="pnlPctCaptured" onclick="handleSort('options','pnlPctCaptured')"> Captured <span class="sort-icon">↕</span></th>
@@ -391,6 +420,22 @@
       return `<span class="${textCls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
     }
 
+    /** Breakeven price — strike shifted by the premium (put: down, call: up). */
+    function breakevenDisplay(o) {
+      if (o.breakeven == null) return '<span class="text-secondary">—</span>';
+      const title = o.type === 'P'
+        ? 'Strike − premium: underlying below this loses money'
+        : 'Strike + premium: underlying above this loses money';
+      return `<span class="text-primary" title="${title}">${fmt.usd(o.breakeven)}</span>`;
+    }
+
+    /** Dollars in the money per share; blank when the option is OTM. */
+    function itmDisplay(o) {
+      if (o.itmAmount == null) return '<span class="text-secondary">—</span>';
+      const total = o.itmTotal != null ? ` (${fmt.usd(o.itmTotal)} total)` : '';
+      return `<span class="text-loss font-semibold" title="Intrinsic value per share${total}">${fmt.usd(o.itmAmount)}</span>`;
+    }
+
     function deltaDisplay(delta) {
       if (delta == null) return '<span class="text-secondary">—</span>';
       const abs = Math.abs(delta);
@@ -433,8 +478,8 @@
       options: {
         ticker: 'str', type: 'str', strike: 'num', dte: 'num',
         qty: 'num', premium: 'num', currentPrice: 'num', underlyingPrice: 'num',
-        otmPct: 'num', delta: 'num', unrealizedPnl: 'num', pnlPctCaptured: 'num',
-        exposure: 'num',
+        breakeven: 'num', otmPct: 'num', itmAmount: 'num', delta: 'num',
+        unrealizedPnl: 'num', pnlPctCaptured: 'num', exposure: 'num',
       },
     };
 
@@ -553,7 +598,7 @@
       document.getElementById('options-count').textContent = `(${options.length})`;
       const tbody = document.getElementById('options-body');
       if (!options.length) {
-        tbody.innerHTML = `<tr><td colspan="14" class="px-4 py-6 text-center text-sm text-secondary">No options positions</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="16" class="px-4 py-6 text-center text-sm text-secondary">No options positions</td></tr>`;
         return;
       }
       tbody.innerHTML = options.map(o => {
@@ -582,7 +627,9 @@
             <td class="px-4 py-3 num text-secondary hidden lg:table-cell">${fmt.usd(o.premium)}</td>
             <td class="px-4 py-3 num hidden lg:table-cell ${o.currentPrice != null && o.premium != null ? ((o.qty < 0 ? o.currentPrice <= o.premium : o.currentPrice >= o.premium) ? 'text-gain' : 'text-loss') : 'text-secondary'}">${o.currentPrice != null ? fmt.usd(o.currentPrice) : '—'}</td>
             <td class="px-4 py-3 num text-primary hidden lg:table-cell">${o.underlyingPrice != null ? fmt.usd(o.underlyingPrice) : '<span class="text-secondary">—</span>'}</td>
+            <td class="px-4 py-3 num hidden lg:table-cell">${breakevenDisplay(o)}</td>
             <td class="px-4 py-3 num whitespace-nowrap">${otmDisplay(o.otmPct)}</td>
+            <td class="px-4 py-3 num whitespace-nowrap">${itmDisplay(o)}</td>
             <td class="px-4 py-3 num">${deltaDisplay(o.delta)}</td>
             <td class="px-4 py-3 num ${pnlColor(o.unrealizedPnl)} hidden sm:table-cell">${fmt.pnl(o.unrealizedPnl)}</td>
             <td class="px-4 py-3 num hidden md:table-cell">${capturedPct}</td>
@@ -738,6 +785,10 @@
     async function checkStatus() {
       const dot = document.getElementById('dot');
       const label = document.getElementById('dot-label');
+      if (SNAPSHOT_MODE) {
+        dot.className = 'w-2 h-2 rounded-full dot-offline'; label.textContent = 'Snapshot';
+        return;
+      }
       try {
         const d = await (await fetch('/api/status')).json();
         if (d.ok) {
@@ -748,6 +799,112 @@
       } catch {
         dot.className = 'w-2 h-2 rounded-full dot-offline'; label.textContent = 'Offline';
       }
+    }
+
+    // ── Snapshots ───────────────────────────────────────────────
+    // Locally, /api/portfolio falls back to the last saved pull (stale: true)
+    // when the gateway is down. On Cloudflare (SNAPSHOT_MODE) the page reads
+    // the encrypted snapshot from /api/snapshot and decrypts it here.
+
+    const SNAPSHOT_MODE = window.SNAPSHOT_MODE === true;
+    const PASS_KEY = 'snapshotPassphrase';
+
+    function storageGet(k)    { try { return localStorage.getItem(k); } catch { return null; } }
+    function storageSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
+
+    let passphrase = SNAPSHOT_MODE ? storageGet(PASS_KEY) : null;
+
+    class LockedError extends Error {
+      constructor(takenAt, wrong = false) { super('locked'); this.takenAt = takenAt; this.wrong = wrong; }
+    }
+
+    const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+    /** Mirror of snapshot.encrypt(): PBKDF2-SHA256 → AES-256-GCM. */
+    async function decryptSnapshot(env, pass) {
+      const base = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', hash: 'SHA-256', salt: fromB64(env.salt), iterations: env.iterations },
+        base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: fromB64(env.iv) }, key, fromB64(env.ciphertext));
+      return JSON.parse(new TextDecoder().decode(plain));
+    }
+
+    async function fetchPortfolio() {
+      if (!SNAPSHOT_MODE) {
+        const resp = await fetch('/api/portfolio');
+        const data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load portfolio');
+        return data;
+      }
+
+      const resp = await fetch('/api/snapshot', { cache: 'no-store' });
+      if (resp.status === 404) throw new Error('No snapshot yet — click Refresh in the local app while the gateway is logged in.');
+      if (!resp.ok) throw new Error('Could not fetch the snapshot');
+      const env = await resp.json();
+      if (!passphrase) throw new LockedError(env.takenAt);
+      try {
+        return { ...(await decryptSnapshot(env, passphrase)), stale: true };
+      } catch {
+        passphrase = null;
+        storageSet(PASS_KEY, null);
+        throw new LockedError(env.takenAt, true);
+      }
+    }
+
+    /** Snapshots age — recompute DTE from the expiry date so countdowns stay right. */
+    function refreshDte(options) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      options.forEach(o => {
+        if (!o.expiryDate) return;
+        const [y, m, d] = o.expiryDate.split('-').map(Number);
+        o.dte = Math.round((new Date(y, m - 1, d) - today) / 86400000);
+        if (o.dte <= 0) o.status = 'expired';
+      });
+    }
+
+    function timeAgo(ts) {
+      const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.round(mins / 60);
+      return hrs < 48 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+    }
+
+    const fmtWhen = ts => ts.toLocaleString('en-US',
+      { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+    function renderStale(data) {
+      const banner = document.getElementById('stale-banner');
+      if (!data.stale) { banner.classList.add('hidden'); return; }
+      const ts = new Date(data.lastUpdated);
+      const lead = SNAPSHOT_MODE ? 'Snapshot from' : 'Gateway offline — showing the snapshot from';
+      document.getElementById('stale-msg').textContent =
+        `${lead} ${fmtWhen(ts)} (${timeAgo(ts)}). Prices, P&L and delta are as of then; DTE is current.`;
+      banner.classList.remove('hidden');
+    }
+
+    function showLocked(show, e = null) {
+      document.getElementById('unlock-card').classList.toggle('hidden', !show);
+      document.querySelectorAll('.data-section').forEach(s => s.classList.toggle('hidden', show));
+      if (!show) return;
+      document.getElementById('stale-banner').classList.add('hidden');
+      document.getElementById('unlock-sub').textContent = e.takenAt
+        ? `Last pull: ${fmtWhen(new Date(e.takenAt))} (${timeAgo(new Date(e.takenAt))}).`
+        : '';
+      document.getElementById('unlock-err').classList.toggle('hidden', !e.wrong);
+      document.getElementById('unlock-pass').focus();
+    }
+
+    function unlockSnapshot(event) {
+      event.preventDefault();
+      const input = document.getElementById('unlock-pass');
+      passphrase = input.value;
+      input.value = '';
+      if (document.getElementById('unlock-remember').checked) storageSet(PASS_KEY, passphrase);
+      loadPortfolio();
     }
 
     // ── Main load ───────────────────────────────────────────────
@@ -763,9 +920,10 @@
       renderSkeleton();
 
       try {
-        const resp = await fetch('/api/portfolio');
-        const data = await resp.json();
-        if (!resp.ok || data.error) throw new Error(data.message || 'Failed to load portfolio');
+        const data = await fetchPortfolio();
+        showLocked(false);
+        if (data.stale) refreshDte(data.options);
+        renderStale(data);
 
         renderSummary(data.account);
 
@@ -778,11 +936,20 @@
         applySort('options');
 
         const ts = new Date(data.lastUpdated);
-        document.getElementById('last-updated').textContent =
-          'Updated ' + ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const updated = document.getElementById('last-updated');
+        updated.textContent = data.stale
+          ? 'Snapshot ' + fmtWhen(ts)
+          : 'Updated ' + ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        updated.title = '';
+        if (data.cloud) {
+          updated.textContent += data.cloud.ok ? ' · Synced to cloud' : ' · Cloud sync failed';
+          updated.title = data.cloud.error ?? '';
+        }
         checkStatus();
 
       } catch (e) {
+        if (e instanceof LockedError) { showLocked(true, e); return; }
+        showLocked(false);
         document.getElementById('error-msg').textContent = e.message;
         err.classList.remove('hidden');
         ['stocks-body', 'options-body'].forEach(id => {
@@ -824,6 +991,11 @@
     }
 
     // Boot
+    if (SNAPSHOT_MODE) {
+      // Only the portfolio page is published; the other pages need the local app
+      document.getElementById('main-nav').classList.add('hidden');
+      document.getElementById('error-hint').classList.add('hidden');
+    }
     initTheme();
     loadPortfolio();
   </script>
